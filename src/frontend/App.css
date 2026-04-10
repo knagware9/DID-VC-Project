@@ -100,6 +100,7 @@
   top: 0;
   left: 0;
   z-index: 100;
+  overflow-y: auto;
 }
 
 .sidebar-logo {
@@ -140,6 +141,11 @@
 .sidebar-nav-item:hover {
   background: #263548;
   color: #e2e8f0;
+}
+
+.sidebar-nav-item:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: -2px;
 }
 
 .sidebar-nav-item.active {
@@ -219,7 +225,7 @@
 .card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 20px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   margin-bottom: 1.5rem;
@@ -262,6 +268,7 @@
 .form-input:focus,
 .form-textarea:focus {
   border-color: #1a56db;
+  box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.2);
 }
 
 .form-textarea {
@@ -301,7 +308,7 @@
 .btn-secondary {
   background: #ffffff;
   color: #374151;
-  border: 1px solid #e2e8f0;
+  border: 1.5px solid #e2e8f0;
 }
 
 .btn-secondary:hover:not(:disabled) {
