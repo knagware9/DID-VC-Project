@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "/Users/kamleshnagware/did-vc-project/.claude/start-frontend.sh",
+      "runtimeArgs": [],
+      "port": 3000
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "/Users/kamleshnagware/did-vc-project/.claude/start-backend.sh",
+      "runtimeArgs": [],
+      "port": 3002
+    },
+    {
+      "name": "postgres",
+      "runtimeExecutable": "/usr/local/bin/docker",
+      "runtimeArgs": ["compose", "up", "-d", "postgres"],
+      "port": 5433
+    }
+  ]
+}
