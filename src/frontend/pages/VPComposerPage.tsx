@@ -80,8 +80,8 @@ export default function VPComposerPage() {
       <div style={{ display: 'flex', marginBottom: '2rem', position: 'relative' }}>
         {[1, 2, 3, 4].map(s => (
           <div key={s} style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ width: 32, height: 32, borderRadius: '50%', background: step >= s ? '#667eea' : '#e2e8f0', color: step >= s ? 'white' : '#888', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.9rem' }}>{s}</div>
-            <div style={{ fontSize: '0.75rem', color: step >= s ? '#667eea' : '#888', marginTop: '0.25rem' }}>
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: step >= s ? '#1a56db' : '#e2e8f0', color: step >= s ? 'white' : '#888', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.9rem' }}>{s}</div>
+            <div style={{ fontSize: '0.75rem', color: step >= s ? '#1a56db' : '#888', marginTop: '0.25rem' }}>
               {['Select VCs', 'Pick Fields', 'Purpose', 'Review & Sign'][s - 1]}
             </div>
           </div>
@@ -97,7 +97,7 @@ export default function VPComposerPage() {
           {credentials.length === 0 ? <p style={{ color: '#888' }}>No credentials in wallet. Request some from DGFT first.</p> : (
             <div style={{ display: 'grid', gap: '0.75rem' }}>
               {credentials.map((c: any) => (
-                <div key={c.id} onClick={() => toggleCred(c.id)} className="card" style={{ cursor: 'pointer', border: `2px solid ${selectedCredIds.has(c.id) ? '#667eea' : '#e2e8f0'}`, background: selectedCredIds.has(c.id) ? '#f0f4ff' : 'white' }}>
+                <div key={c.id} onClick={() => toggleCred(c.id)} className="card" style={{ cursor: 'pointer', border: `2px solid ${selectedCredIds.has(c.id) ? '#1a56db' : '#e2e8f0'}`, background: selectedCredIds.has(c.id) ? '#f0f4ff' : 'white' }}>
                   <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                     <input type="checkbox" checked={selectedCredIds.has(c.id)} onChange={() => {}} style={{ width: 18, height: 18 }} />
                     <div>
@@ -219,7 +219,7 @@ export default function VPComposerPage() {
               </div>
             </div>
             <details style={{ textAlign: 'left', marginBottom: '1.5rem' }}>
-              <summary style={{ cursor: 'pointer', fontSize: '0.85rem', color: '#667eea', marginBottom: '0.5rem' }}>View VP JSON</summary>
+              <summary style={{ cursor: 'pointer', fontSize: '0.85rem', color: '#1a56db', marginBottom: '0.5rem' }}>View VP JSON</summary>
               <textarea readOnly value={JSON.stringify(composedVP, null, 2)} rows={10} style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.75rem', padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.5rem' }} />
               <button className="btn btn-secondary" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }} onClick={() => navigator.clipboard?.writeText(JSON.stringify(composedVP, null, 2))}>Copy VP JSON</button>
             </details>

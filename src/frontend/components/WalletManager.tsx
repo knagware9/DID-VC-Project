@@ -117,7 +117,7 @@ const WalletManager: React.FC<WalletManagerProps> = ({ onCredentialSelect }) => 
             </div>
             <div>
               <strong>Credentials:</strong>
-              <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#667eea', marginTop: '0.5rem' }}>
+              <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#1a56db', marginTop: '0.5rem' }}>
                 {walletInfo.credentialCount}
               </div>
             </div>
@@ -182,7 +182,7 @@ const WalletManager: React.FC<WalletManagerProps> = ({ onCredentialSelect }) => 
                   key={walletCred.id}
                   className="credential-item"
                   style={{
-                    borderColor: isSelected ? '#667eea' : '#e0e0e0',
+                    borderColor: isSelected ? '#1a56db' : '#e0e0e0',
                     cursor: 'pointer',
                   }}
                   onClick={() => {

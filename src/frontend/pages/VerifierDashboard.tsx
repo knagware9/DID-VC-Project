@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
+import { useAppShell } from '../components/AppShell';
 
 export default function VerifierDashboard() {
   const { user, token } = useAuth();
-  const [tab, setTab] = useState<'requests' | 'new' | 'received'>('requests');
+  const { activeTab: tab, setActiveTab: setTab } = useAppShell();
   const [requests, setRequests] = useState<any[]>([]);
   const [selected, setSelected] = useState<any | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -80,14 +81,6 @@ export default function VerifierDashboard() {
       </div>
 
       {msg && <div className={`alert alert-${msg.type}`}>{msg.text}</div>}
-
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '2px solid #e2e8f0' }}>
-        {(['requests', 'new', 'received'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ padding: '0.75rem 1.5rem', border: 'none', background: 'none', cursor: 'pointer', borderBottom: `3px solid ${tab === t ? '#667eea' : 'transparent'}`, color: tab === t ? '#667eea' : '#555', fontWeight: tab === t ? 700 : 400 }}>
-            {t === 'requests' ? 'Verification Requests' : t === 'new' ? 'New Request for Proof' : `Received (${receivedPresentations.length})`}
-          </button>
-        ))}
-      </div>
 
       {tab === 'new' && (
         <div style={{ maxWidth: 500 }}>
@@ -174,7 +167,7 @@ export default function VerifierDashboard() {
                   {requests.map((r: any) => {
                     const sc = statusColor(r.status);
                     return (
-                      <div key={r.id} className="card" onClick={() => setSelected(r)} style={{ cursor: 'pointer', border: selected?.id === r.id ? '2px solid #667eea' : undefined }}>
+                      <div key={r.id} className="card" onClick={() => setSelected(r)} style={{ cursor: 'pointer', border: selected?.id === r.id ? '2px solid #1a56db' : undefined }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                           <span style={{ fontWeight: 600 }}>Proof Request</span>
                           <span style={{ padding: '2px 10px', borderRadius: '12px', fontSize: '0.8rem', background: sc.bg, color: sc.color }}>{r.status}</span>

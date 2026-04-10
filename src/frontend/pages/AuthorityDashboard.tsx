@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppShell } from '../components/AppShell';
 
 type AuthoritySlot = {
   status: 'pending' | 'approved' | 'rejected';
@@ -23,7 +23,7 @@ type Stats = { pending: string; approved: string; rejected: string; total: strin
 
 const AUTHORITY_META: Record<string, { label: string; color: string }> = {
   mca:               { label: 'MCA',        color: '#1a73e8' },
-  dgft:              { label: 'DGFT',       color: '#667eea' },
+  dgft:              { label: 'DGFT',       color: '#1a56db' },
   gstn_trust_anchor: { label: 'GSTN',       color: '#28a745' },
   pan_trust_anchor:  { label: 'Income Tax', color: '#e67e22' },
 };
@@ -45,11 +45,10 @@ const AUTHORITY_FIELDS: Record<string, { key: string; label: string; valueKey: k
 };
 
 export default function AuthorityDashboard() {
-  const { token, user, logout } = useAuth();
+  const { token, user } = useAuth();
   const authorityType = (user as any)?.authority_type || 'dgft';
   const meta = AUTHORITY_META[authorityType] || AUTHORITY_META.dgft;
-  const navigate = useNavigate();
-  const [view, setView] = useState<'dashboard' | 'pending' | 'checker-queue'>('dashboard');
+  const { activeTab: view, setActiveTab: setView } = useAppShell();
   const [mcQueue, setMcQueue] = useState<any[]>([]);
   const [orgs, setOrgs] = useState<OrgApp[]>([]);
   const [stats, setStats] = useState<Stats>({ pending: '0', approved: '0', rejected: '0', total: '0' });
@@ -156,36 +155,8 @@ export default function AuthorityDashboard() {
   const filtered = orgs.filter(o => o.company_name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#f5f5f5' }}>
-      {/* Sidebar */}
-      <div style={{ width: 220, background: '#fff', borderRight: '1px solid #e2e8f0', padding: '1.5rem 0' }}>
-        <div style={{ padding: '0 1.5rem 1.5rem', borderBottom: '1px solid #e2e8f0' }}>
-          <div style={{ background: meta.color, color: '#fff', display: 'inline-block', padding: '0.25rem 0.75rem', borderRadius: 20, fontSize: '0.7rem', fontWeight: 600, marginBottom: '0.5rem' }}>{meta.label}</div>
-          <div style={{ fontWeight: 700, color: '#333' }}>Authority Portal</div>
-        </div>
-        {[
-          { key: 'dashboard', label: 'Dashboard' },
-          { key: 'pending', label: 'Pending Requests' },
-        ].map(item => (
-          <button key={item.key} onClick={() => setView(item.key as any)}
-            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1.5rem', border: 'none', background: view === item.key ? '#f0f4ff' : 'transparent', color: view === item.key ? '#667eea' : '#555', fontWeight: view === item.key ? 600 : 400, cursor: 'pointer' }}>
-            {item.label}
-          </button>
-        ))}
-        {(subRole === 'checker' || subRole === 'vc_issuer_admin') && (
-          <button onClick={() => setView('checker-queue')}
-            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1.5rem', border: 'none', background: view === 'checker-queue' ? '#f0f4ff' : 'transparent', color: view === 'checker-queue' ? '#667eea' : '#555', fontWeight: view === 'checker-queue' ? 600 : 400, cursor: 'pointer' }}>
-            Checker Queue
-          </button>
-        )}
-        <button onClick={() => { logout(); navigate('/login'); }}
-          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1.5rem', border: 'none', background: 'transparent', color: '#dc3545', cursor: 'pointer', marginTop: 'auto' }}>
-          Logout
-        </button>
-      </div>
-
-      {/* Main content */}
-      <div style={{ flex: 1, padding: '2rem' }}>
+    <>
+    <div style={{ padding: '2rem' }}>
         {msg && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{msg}<button onClick={() => setMsg('')} style={{ marginLeft: '1rem', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button></div>}
 
         {view === 'dashboard' && (
@@ -196,7 +167,7 @@ export default function AuthorityDashboard() {
                 { label: 'Pending Requests', value: stats.pending, color: '#ffa500' },
                 { label: 'Approved', value: stats.approved, color: '#28a745' },
                 { label: 'Rejected', value: stats.rejected, color: '#dc3545' },
-                { label: 'Total Organizations', value: stats.total, color: '#667eea' },
+                { label: 'Total Organizations', value: stats.total, color: '#1a56db' },
               ].map(s => (
                 <div key={s.label} className="card" style={{ padding: '1.25rem', textAlign: 'center' }}>
                   <div style={{ fontSize: '2rem', fontWeight: 700, color: s.color }}>{s.value}</div>
@@ -280,7 +251,7 @@ export default function AuthorityDashboard() {
                 { label: 'Awaiting Action', value: stats.pending },
               ].map(s => (
                 <div key={s.label} className="card" style={{ padding: '1rem', textAlign: 'center' }}>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#667eea' }}>{s.value}</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1a56db' }}>{s.value}</div>
                   <div style={{ color: '#666', fontSize: '0.875rem' }}>{s.label}</div>
                 </div>
               ))}
@@ -372,7 +343,7 @@ export default function AuthorityDashboard() {
               ]},
             ].map(section => (
               <div key={section.title} style={{ marginBottom: '1.5rem' }}>
-                <h4 style={{ color: '#667eea', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>{section.title}</h4>
+                <h4 style={{ color: '#1a56db', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>{section.title}</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                   {section.rows.map(([k, v]) => (
                     <div key={k}>
@@ -386,7 +357,7 @@ export default function AuthorityDashboard() {
 
             {/* Application Status */}
             <div style={{ marginBottom: '1.5rem' }}>
-              <h4 style={{ color: '#667eea', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>Application Status</h4>
+              <h4 style={{ color: '#1a56db', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>Application Status</h4>
               <span style={{ background: '#fff3cd', color: '#856404', padding: '0.25rem 0.75rem', borderRadius: 12, fontSize: '0.8rem', fontWeight: 600 }}>{selected.application_status.toUpperCase()}</span>
               <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#666' }}>
                 <span>Created: {new Date(selected.created_at).toLocaleString()}</span>
@@ -396,7 +367,7 @@ export default function AuthorityDashboard() {
 
             {/* Authority Approvals */}
             <div style={{ marginBottom: '1.5rem' }}>
-              <h4 style={{ color: '#667eea', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>Authority Approvals</h4>
+              <h4 style={{ color: '#1a56db', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', marginBottom: '0.75rem' }}>Authority Approvals</h4>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <span style={{ background: meta.color, color: '#fff', padding: '0.25rem 0.75rem', borderRadius: 12, fontSize: '0.75rem', fontWeight: 600 }}>{meta.label}</span>
                 <span style={{ color: '#666', fontSize: '0.875rem' }}>{authorityType === 'mca' ? 'Ministry of Corporate Affairs' : authorityType === 'dgft' ? 'Director General of Foreign Trade' : authorityType === 'gstn_trust_anchor' ? 'GST Network Trust Anchor' : 'Income Tax / PAN Trust Anchor'}</span>
@@ -467,6 +438,6 @@ export default function AuthorityDashboard() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

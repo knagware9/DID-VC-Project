@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppShell } from '../components/AppShell';
 
 type Tab = 'overview' | 'authorities' | 'dids' | 'organizations';
 
@@ -33,8 +34,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function PortalManagerDashboard() {
-  const { token, user, logout } = useAuth();
-  const [tab, setTab] = useState<Tab>('overview');
+  const { token, user } = useAuth();
+  const { activeTab: tab, setActiveTab: setTab } = useAppShell();
   const [stats, setStats] = useState<Stats | null>(null);
   const [authorities, setAuthorities] = useState<Authority[]>([]);
   const [dids, setDids] = useState<DIDRow[]>([]);
@@ -105,36 +106,8 @@ export default function PortalManagerDashboard() {
     finally { setLoading(false); }
   }
 
-  const tabStyle = (t: Tab) => ({
-    padding: '0.5rem 1.25rem', border: 'none', cursor: 'pointer', borderRadius: 6,
-    background: tab === t ? '#667eea' : '#f0f0f0',
-    color: tab === t ? '#fff' : '#333', fontWeight: 600 as const, fontSize: '0.875rem',
-  });
-
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#f5f5f5' }}>
-      {/* Sidebar */}
-      <div style={{ width: 220, background: '#fff', borderRight: '1px solid #e2e8f0', padding: '1.5rem 0', flexShrink: 0 }}>
-        <div style={{ padding: '0 1.5rem 1.5rem', borderBottom: '1px solid #e2e8f0' }}>
-          <div style={{ background: '#667eea', color: '#fff', display: 'inline-block', padding: '0.25rem 0.75rem', borderRadius: 20, fontSize: '0.7rem', fontWeight: 700, marginBottom: '0.5rem' }}>PORTAL MANAGER</div>
-          <div style={{ fontWeight: 700, color: '#333', fontSize: '0.9rem' }}>Platform Admin</div>
-        </div>
-        {(['overview', 'authorities', 'dids', 'organizations'] as Tab[]).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1.5rem', border: 'none',
-              background: tab === t ? '#f0f4ff' : 'transparent', color: tab === t ? '#667eea' : '#555',
-              fontWeight: tab === t ? 600 : 400, cursor: 'pointer', textTransform: 'capitalize' }}>
-            {t === 'dids' ? 'DID Registry' : t === 'authorities' ? 'Authority Accounts' : t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
-        <button onClick={() => { logout(); }}
-          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.75rem 1.5rem', border: 'none', background: 'transparent', color: '#dc3545', cursor: 'pointer', marginTop: '1rem' }}>
-          Logout
-        </button>
-      </div>
-
-      {/* Main */}
-      <div style={{ flex: 1, padding: '2rem', overflow: 'auto' }}>
+    <div style={{ padding: '2rem', overflow: 'auto' }}>
         {msg && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{msg} <button onClick={() => setMsg('')} style={{ marginLeft: '1rem', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button></div>}
 
         {/* Created credential modal */}
@@ -160,7 +133,7 @@ export default function PortalManagerDashboard() {
             {stats && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
                 {[
-                  { label: 'Total Organizations', value: stats.total_orgs, color: '#667eea' },
+                  { label: 'Total Organizations', value: stats.total_orgs, color: '#1a56db' },
                   { label: 'Active DIDs', value: stats.total_dids, color: '#1a73e8' },
                   { label: 'VCs Issued', value: stats.total_vcs, color: '#28a745' },
                   { label: 'Pending MC Actions', value: stats.pending_mc_actions, color: '#ffc107' },
@@ -362,7 +335,6 @@ export default function PortalManagerDashboard() {
             </div>
           </>
         )}
-      </div>
     </div>
   );
 }

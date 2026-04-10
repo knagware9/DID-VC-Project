@@ -8,7 +8,7 @@ import { useAppShell } from '../components/AppShell';
 
 const DIA_CONFIG = [
   { type: 'CompanyRegistrationCredential', label: 'Company Registration', authority: 'MCA',        badge: '#1a73e8', diaLabel: 'DIA1', anchorKey: 'cin' },
-  { type: 'IECCredential',                 label: 'IEC Credential',       authority: 'DGFT',       badge: '#667eea', diaLabel: 'DIA2', anchorKey: 'ieCode' },
+  { type: 'IECCredential',                 label: 'IEC Credential',       authority: 'DGFT',       badge: '#1a56db', diaLabel: 'DIA2', anchorKey: 'ieCode' },
   { type: 'GSTINCredential',               label: 'GSTIN Credential',     authority: 'GSTN',       badge: '#28a745', diaLabel: 'DIA3', anchorKey: 'gstin' },
   { type: 'PANCredential',                 label: 'PAN Credential',       authority: 'Income Tax', badge: '#e67e22', diaLabel: 'DIA4', anchorKey: 'pan' },
 ];
