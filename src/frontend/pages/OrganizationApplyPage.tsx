@@ -41,7 +41,7 @@ export default function OrganizationApplyPage() {
 
   if (success) {
     return (
-      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ minHeight: '100vh', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div className="card" style={{ maxWidth: 480, textAlign: 'center', padding: '2.5rem' }}>
           <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✅</div>
           <h2 style={{ color: '#28a745', marginBottom: '0.75rem' }}>Application Submitted!</h2>
@@ -55,17 +55,17 @@ export default function OrganizationApplyPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: '2rem 1rem' }}>
+    <div style={{ minHeight: '100vh', background: '#f1f5f9', padding: '2rem 1rem' }}>
       <div style={{ maxWidth: 700, margin: '0 auto' }}>
         <div className="card" style={{ padding: '2rem' }}>
-          <h1 style={{ color: '#667eea', marginBottom: '0.25rem' }}>Organization Registration</h1>
+          <h1 style={{ color: '#1a56db', marginBottom: '0.25rem' }}>Organization Registration</h1>
           <p style={{ color: '#666', marginBottom: '2rem' }}>Apply for DGFT-verified digital identity credentials</p>
 
           {error && <div className="alert alert-error" style={{ marginBottom: '1rem' }}>{error}</div>}
 
           <form onSubmit={handleSubmit}>
             {/* Section 1: Organization Information */}
-            <h3 style={{ color: '#333', borderBottom: '2px solid #667eea', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
+            <h3 style={{ color: '#333', borderBottom: '2px solid #1a56db', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
               Section 1 — Organization Information
             </h3>
             <div className="form-group">
@@ -82,7 +82,7 @@ export default function OrganizationApplyPage() {
             </div>
 
             {/* Section 2: Individual Details */}
-            <h3 style={{ color: '#333', borderBottom: '2px solid #667eea', paddingBottom: '0.5rem', margin: '1.5rem 0 1rem' }}>
+            <h3 style={{ color: '#333', borderBottom: '2px solid #1a56db', paddingBottom: '0.5rem', margin: '1.5rem 0 1rem' }}>
               Section 2 — Individual (Director) Details
             </h3>
             <div className="form-group">
@@ -118,7 +118,7 @@ export default function OrganizationApplyPage() {
             </div>
 
             {/* Section 3: Company Details */}
-            <h3 style={{ color: '#333', borderBottom: '2px solid #667eea', paddingBottom: '0.5rem', margin: '1.5rem 0 1rem' }}>
+            <h3 style={{ color: '#333', borderBottom: '2px solid #1a56db', paddingBottom: '0.5rem', margin: '1.5rem 0 1rem' }}>
               Section 3 — Company Details
             </h3>
             <div className="form-group">
@@ -185,7 +185,7 @@ export default function OrganizationApplyPage() {
           </form>
 
           <p style={{ textAlign: 'center', marginTop: '1rem', color: '#666', fontSize: '0.875rem' }}>
-            Already approved? <a href="/login" style={{ color: '#667eea' }}>Login here</a>
+            Already approved? <a href="/login" style={{ color: '#1a56db' }}>Login here</a>
           </p>
         </div>
       </div>

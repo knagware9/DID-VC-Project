@@ -23,8 +23,8 @@ export default function RegisterPage() {
     <div style={{ maxWidth: 480, margin: '40px auto', padding: '0 1rem' }}>
       <div className="card">
         <h2 style={{ textAlign: 'center', marginBottom: '1.5rem' }}>Create Account</h2>
-        <div style={{ background: '#f0f4ff', border: '1px solid #667eea', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
-          Corporate / importer-exporter? <a href="/signup" style={{ color: '#667eea', fontWeight: 600 }}>Apply for organization registration →</a>
+        <div style={{ background: '#f0f4ff', border: '1px solid #1a56db', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          Corporate / importer-exporter? <a href="/signup" style={{ color: '#1a56db', fontWeight: 600 }}>Apply for organization registration →</a>
         </div>
         {error && <div className="alert alert-error">{error}</div>}
         <form onSubmit={handleSubmit}>
@@ -44,7 +44,7 @@ export default function RegisterPage() {
             <label>Role</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
               {roles.map(r => (
-                <label key={r.value} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.75rem', border: `2px solid ${form.role === r.value ? '#667eea' : '#e2e8f0'}`, borderRadius: '8px', cursor: 'pointer', background: form.role === r.value ? '#f0f4ff' : 'white' }}>
+                <label key={r.value} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.75rem', border: `2px solid ${form.role === r.value ? '#1a56db' : '#e2e8f0'}`, borderRadius: '8px', cursor: 'pointer', background: form.role === r.value ? '#f0f4ff' : 'white' }}>
                   <input type="radio" name="role" value={r.value} checked={form.role === r.value} onChange={() => setForm(f => ({ ...f, role: r.value as UserRole }))} style={{ marginTop: '2px' }} />
                   <div>
                     <div style={{ fontWeight: 600 }}>{r.label}</div>
