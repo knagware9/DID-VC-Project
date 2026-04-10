@@ -3,8 +3,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import QRShareModal from '../components/QRShareModal';
 import ShareToDIDModal from '../components/ShareToDIDModal';
+import { useAppShell } from '../components/AppShell';
 
-type Tab = 'credentials' | 'employees' | 'requests' | 'issue' | 'proof-requests' | 'corp-wallet' | 'team' | 'vp-queue';
 
 const DIA_CONFIG = [
   { type: 'CompanyRegistrationCredential', label: 'Company Registration', authority: 'MCA',        badge: '#1a73e8', diaLabel: 'DIA1', anchorKey: 'cin' },
@@ -78,7 +78,7 @@ function VPDraftForm({ token, walletVCs, onSubmit }: { token: string | null; wal
 
 export default function CorporateDashboard() {
   const { user, token } = useAuth();
-  const [tab, setTab] = useState<Tab>('credentials');
+  const { activeTab: tab, setActiveTab: setTab } = useAppShell();
   const [credentials, setCredentials] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
@@ -203,18 +203,7 @@ export default function CorporateDashboard() {
     } catch (err: any) { showMsg('error', err.message); }
   }
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'credentials', label: 'My Credentials' },
-    { id: 'employees', label: 'Employees (Sub-DIDs)' },
-    { id: 'requests', label: 'Pending Requests' },
-    { id: 'issue', label: 'Issue / Request' },
-    { id: 'proof-requests', label: 'Proof Requests' },
-    { id: 'corp-wallet', label: 'Corp Wallet' },
-    ...(subRole === 'super_admin' || subRole === 'admin' ? [{ id: 'team' as Tab, label: 'Team' }] : []),
-    ...(subRole === 'checker' ? [{ id: 'vp-queue' as Tab, label: 'VP Queue' }] : []),
-  ];
-
-  return (
+return (
     <div className="page-container">
       <div style={{ marginBottom: '1.5rem' }}>
         <h1>Corporate Dashboard</h1>
@@ -225,16 +214,7 @@ export default function CorporateDashboard() {
 
       {msg && <div className={`alert alert-${msg.type}`}>{msg.text}</div>}
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '2px solid #e2e8f0', paddingBottom: '0' }}>
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ padding: '0.75rem 1.25rem', border: 'none', background: 'none', cursor: 'pointer', borderBottom: `3px solid ${tab === t.id ? '#667eea' : 'transparent'}`, color: tab === t.id ? '#667eea' : '#555', fontWeight: tab === t.id ? 700 : 400, transition: 'all 0.2s' }}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {loading ? <div style={{ textAlign: 'center', padding: '2rem' }}>Loading...</div> : (
+{loading ? <div style={{ textAlign: 'center', padding: '2rem' }}>Loading...</div> : (
         <>
           {/* Tab: My Credentials */}
           {tab === 'credentials' && (
