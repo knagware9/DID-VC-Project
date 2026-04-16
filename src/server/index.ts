@@ -2375,6 +2375,67 @@ function buildDIAVC(authorityType: string, org: any, issuerDid: any, holderDid: 
   return { ...base, ...subjectMap[authorityType] };
 }
 
+function buildCorporateVC(vcType: string, app: any, issuerDid: any, holderDid: string, expiresAt: Date) {
+  const vcId = crypto.randomUUID();
+  const now = new Date();
+  const doc = (app.documents || []).find((d: any) => d.vc_type === vcType) || {};
+  const base = {
+    '@context': ['https://www.w3.org/2018/credentials/v1'],
+    id: `urn:uuid:${vcId}`,
+    issuer: issuerDid.did_string,
+    issuanceDate: now.toISOString(),
+    expirationDate: expiresAt.toISOString(),
+    proof: {
+      type: 'EcdsaSecp256k1Signature2019',
+      created: now.toISOString(),
+      verificationMethod: `${issuerDid.did_string}#keys-1`,
+      proofPurpose: 'assertionMethod',
+      jws: crypto.createHmac('sha256', issuerDid.private_key_encrypted)
+        .update(JSON.stringify({ id: `urn:uuid:${vcId}`, holderDid }))
+        .digest('hex'),
+    },
+  };
+  const subjectMap: Record<string, object> = {
+    MCARegistration: {
+      type: ['VerifiableCredential', 'MCARegistration'],
+      credentialSubject: {
+        id: holderDid,
+        companyName: app.company_name,
+        cin: app.cin,
+        companyStatus: app.company_status,
+        companyCategory: app.company_category,
+        dateOfIncorporation: app.date_of_incorporation,
+        registrationNumber: doc.reference_number || app.cin,
+      },
+    },
+    GSTINCredential: {
+      type: ['VerifiableCredential', 'GSTINCredential'],
+      credentialSubject: {
+        id: holderDid,
+        companyName: app.company_name,
+        gstin: doc.reference_number || app.gstn,
+      },
+    },
+    IECCredential: {
+      type: ['VerifiableCredential', 'IECCredential'],
+      credentialSubject: {
+        id: holderDid,
+        companyName: app.company_name,
+        ieCode: doc.reference_number || app.ie_code,
+      },
+    },
+    PANCredential: {
+      type: ['VerifiableCredential', 'PANCredential'],
+      credentialSubject: {
+        id: holderDid,
+        companyName: app.company_name,
+        pan: doc.reference_number || app.pan_number,
+      },
+    },
+  };
+  return { ...base, ...(subjectMap[vcType] || { type: ['VerifiableCredential', vcType], credentialSubject: { id: holderDid } }) };
+}
+
 // ─── Public Endpoints ─────────────────────────────────────────────────────────
 
 // Returns all active DID issuers — used on landing page + Portal Manager dropdown
@@ -2575,6 +2636,140 @@ app.post('/api/portal/corporate-applications/:id/reject', requireAuth, requireRo
     );
     res.json({ success: true });
   } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── DID Issuer: Corporate Applications ──────────────────────────────────────
+
+app.get('/api/did-issuer/corporate-applications', requireAuth, requireRole('government_agency'), async (req, res) => {
+  try {
+    const issuerId = (req as any).user.id;
+    const subRole: string = (req as any).user.sub_role || '';
+    if (subRole !== 'did_issuer_admin') {
+      return res.status(403).json({ error: 'did_issuer_admin sub_role required' });
+    }
+    const result = await query(
+      `SELECT id, org_name, company_name, cin, pan_number,
+              super_admin_name, super_admin_email, requester_name, requester_email,
+              documents, application_status, created_at
+       FROM organization_applications
+       WHERE assigned_issuer_id = $1 AND application_status = 'activated'
+       ORDER BY created_at DESC`,
+      [issuerId]
+    );
+    res.json({ success: true, applications: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/did-issuer/corporate-applications/:id/issue', requireAuth, requireRole('government_agency'), async (req, res) => {
+  try {
+    const issuerId = (req as any).user.id;
+    const subRole: string = (req as any).user.sub_role || '';
+    if (subRole !== 'did_issuer_admin') {
+      return res.status(403).json({ error: 'did_issuer_admin sub_role required' });
+    }
+
+    const { id } = req.params;
+    const { vc_types }: { vc_types: string[] } = req.body;
+    if (!vc_types || vc_types.length === 0) {
+      return res.status(400).json({ error: 'vc_types array required' });
+    }
+
+    // Load application
+    const appResult = await query(
+      `SELECT * FROM organization_applications WHERE id = $1`,
+      [id]
+    );
+    if (appResult.rows.length === 0) return res.status(404).json({ error: 'Application not found' });
+    const app = appResult.rows[0];
+    if (app.application_status !== 'activated') return res.status(400).json({ error: 'Application is not in activated state' });
+    if (app.assigned_issuer_id !== issuerId) return res.status(403).json({ error: 'Application is assigned to a different issuer' });
+
+    // Load issuer's parent DID for signing
+    const issuerDidResult = await query(
+      `SELECT id, did_string, private_key_encrypted FROM dids
+       WHERE user_id = $1 AND did_type = 'parent' ORDER BY created_at DESC LIMIT 1`,
+      [issuerId]
+    );
+    if (issuerDidResult.rows.length === 0) return res.status(400).json({ error: 'Issuer has no parent DID' });
+    const issuerDid = issuerDidResult.rows[0];
+
+    // Generate temp passwords
+    const superAdminTempPass = crypto.randomBytes(8).toString('hex');
+    const requesterTempPass = crypto.randomBytes(8).toString('hex');
+    const superAdminHash = await hashPassword(superAdminTempPass);
+    const requesterHash = await hashPassword(requesterTempPass);
+
+    // All operations in a transaction
+    await query('BEGIN', []);
+    try {
+      // 1. Create super_admin user
+      const superAdminResult = await query(
+        `INSERT INTO users (email, password_hash, role, name, sub_role)
+         VALUES ($1, $2, 'corporate', $3, 'super_admin')
+         RETURNING id`,
+        [app.super_admin_email, superAdminHash, app.company_name]
+      );
+      const superAdminId = superAdminResult.rows[0].id;
+
+      // 2. Set org_id = superAdminId (self-owns)
+      await query(`UPDATE users SET org_id = $1 WHERE id = $1`, [superAdminId]);
+
+      // 3. Create corporate parent DID
+      const slug = app.company_name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+      const corporateDid = await createAndStoreDID(superAdminId, 'parent', undefined, slug);
+
+      // 4. Create requester user
+      const requesterResult = await query(
+        `INSERT INTO users (email, password_hash, role, name, sub_role, org_id)
+         VALUES ($1, $2, 'corporate', $3, 'requester', $4)
+         RETURNING id`,
+        [app.requester_email, requesterHash, app.requester_name, superAdminId]
+      );
+      const requesterId = requesterResult.rows[0].id;
+
+      // 5. Issue selected VCs
+      const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+      for (const vcType of vc_types) {
+        const vcJson = buildCorporateVC(vcType, app, issuerDid, corporateDid.did, expiresAt);
+        await query(
+          `INSERT INTO credentials (vc_json, holder_did_id, issuer_did_id, credential_type, issued_at, expires_at)
+           VALUES ($1, $2, $3, $4, NOW(), $5)`,
+          [JSON.stringify(vcJson), corporateDid.id, issuerDid.id, vcType, expiresAt]
+        );
+      }
+
+      // 6. Mark application as issued
+      await query(
+        `UPDATE organization_applications
+         SET application_status = 'issued', corporate_user_id = $1
+         WHERE id = $2`,
+        [superAdminId, id]
+      );
+
+      await query('COMMIT', []);
+
+      // Log temp passwords (email delivery is future scope)
+      console.log(`[ISSUED] super_admin: ${app.super_admin_email} | password: ${superAdminTempPass} | requester: ${app.requester_email} | password: ${requesterTempPass}`);
+
+      res.json({
+        success: true,
+        corporateDid: corporateDid.did,
+        super_admin_email: app.super_admin_email,
+        super_admin_temp_password: superAdminTempPass,
+        requester_email: app.requester_email,
+        requester_temp_password: requesterTempPass,
+        vcs_issued: vc_types.length,
+      });
+    } catch (txErr: any) {
+      await query('ROLLBACK', []);
+      throw txErr;
+    }
+  } catch (error: any) {
+    console.error('Issue error:', error);
     res.status(500).json({ error: error.message });
   }
 });
