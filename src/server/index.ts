@@ -2494,6 +2494,91 @@ app.post('/api/organizations/apply',
   }
 );
 
+// ─── Portal Manager: Corporate Applications ───────────────────────────────────
+
+app.get('/api/portal/corporate-applications', requireAuth, requireRole('portal_manager'), async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT
+         oa.id, oa.org_name, oa.company_name, oa.cin, oa.pan_number,
+         oa.super_admin_name, oa.super_admin_email,
+         oa.requester_name, oa.requester_email,
+         oa.documents, oa.application_status, oa.rejection_reason,
+         oa.created_at,
+         u.name AS assigned_issuer_name, u.email AS assigned_issuer_email
+       FROM organization_applications oa
+       LEFT JOIN users u ON u.id = oa.assigned_issuer_id
+       WHERE oa.application_status IN ('pending', 'activated', 'issued', 'rejected')
+         AND oa.super_admin_email IS NOT NULL
+       ORDER BY oa.created_at DESC`,
+      []
+    );
+    res.json({ success: true, applications: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/portal/corporate-applications/:id/activate', requireAuth, requireRole('portal_manager'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assigned_issuer_id } = req.body;
+    if (!assigned_issuer_id) return res.status(400).json({ error: 'assigned_issuer_id required' });
+
+    // Validate issuer is a did_issuer_admin
+    const issuerCheck = await query(
+      `SELECT id FROM users WHERE id = $1 AND role = 'government_agency' AND sub_role = 'did_issuer_admin'`,
+      [assigned_issuer_id]
+    );
+    if (issuerCheck.rows.length === 0) {
+      return res.status(400).json({ error: 'User is not a valid DID Issuer' });
+    }
+
+    const appCheck = await query(
+      `SELECT id FROM organization_applications WHERE id = $1 AND application_status = 'pending'`,
+      [id]
+    );
+    if (appCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Application not found or not in pending state' });
+    }
+
+    await query(
+      `UPDATE organization_applications
+       SET application_status = 'activated', assigned_issuer_id = $1
+       WHERE id = $2`,
+      [assigned_issuer_id, id]
+    );
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/portal/corporate-applications/:id/reject', requireAuth, requireRole('portal_manager'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rejection_reason } = req.body;
+
+    const appCheck = await query(
+      `SELECT id FROM organization_applications WHERE id = $1 AND application_status = 'pending'`,
+      [id]
+    );
+    if (appCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Application not found or not in pending state' });
+    }
+
+    await query(
+      `UPDATE organization_applications
+       SET application_status = 'rejected', rejection_reason = $1
+       WHERE id = $2`,
+      [rejection_reason || null, id]
+    );
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/authority/organizations', requireAuth, requireRole('government_agency'), async (req, res) => {
   try {
     const authorityType: string = (req as any).user.authority_type;

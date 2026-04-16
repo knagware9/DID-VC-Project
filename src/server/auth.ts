@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { query } from '../db/index.js';
 
-export type UserRole = 'corporate' | 'government_agency' | 'verifier';
+export type UserRole = 'corporate' | 'government_agency' | 'verifier' | 'portal_manager';
 
 export interface User {
   id: string;
