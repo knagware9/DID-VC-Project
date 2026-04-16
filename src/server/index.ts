@@ -2397,12 +2397,17 @@ app.get('/api/public/did-issuers', async (_req, res) => {
 // ── Organization Application Routes ──────────────────────────────────────
 
 app.post('/api/organizations/apply',
-  corpDocUpload.fields([
-    { name: 'doc_MCARegistration', maxCount: 1 },
-    { name: 'doc_GSTINCredential', maxCount: 1 },
-    { name: 'doc_IECCredential',   maxCount: 1 },
-    { name: 'doc_PANCredential',   maxCount: 1 },
-  ]),
+  (req, res, next) => {
+    corpDocUpload.fields([
+      { name: 'doc_MCARegistration', maxCount: 1 },
+      { name: 'doc_GSTINCredential', maxCount: 1 },
+      { name: 'doc_IECCredential',   maxCount: 1 },
+      { name: 'doc_PANCredential',   maxCount: 1 },
+    ])(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  },
   async (req, res) => {
     try {
       // multer puts text fields in req.body and files in req.files
@@ -2421,7 +2426,7 @@ app.post('/api/organizations/apply',
       // Validate required fields
       const requiredFields = [org_name, email, director_full_name, state, pincode,
         company_name, cin, company_status, company_category,
-        date_of_incorporation, pan_number, company_name,
+        date_of_incorporation, pan_number,
         super_admin_name, super_admin_email, requester_name, requester_email];
       if (requiredFields.some(v => !v)) {
         return res.status(400).json({ error: 'All required fields must be provided' });
