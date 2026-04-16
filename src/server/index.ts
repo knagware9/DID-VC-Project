@@ -2609,12 +2609,9 @@ app.post('/api/organizations/apply',
 // ── Signatory: Corporate Applications ────────────────────────────────────────
 
 // GET /api/corporate/signatory/applications — list pending apps for this signatory
-app.get('/api/corporate/signatory/applications', requireAuth, requireRole('corporate'), async (req, res) => {
+app.get('/api/corporate/signatory/applications', requireAuth, requireRole('corporate'), requireSubRole('authorized_signatory'), async (req, res) => {
   try {
     const user = (req as any).user;
-    if (user.sub_role !== 'authorized_signatory') {
-      return res.status(403).json({ error: 'authorized_signatory sub_role required' });
-    }
     const result = await query(
       `SELECT oa.*, u.name AS assigned_issuer_name, u.email AS assigned_issuer_email
        FROM organization_applications oa
@@ -2631,12 +2628,9 @@ app.get('/api/corporate/signatory/applications', requireAuth, requireRole('corpo
 });
 
 // POST /api/corporate/signatory/applications/:id/approve
-app.post('/api/corporate/signatory/applications/:id/approve', requireAuth, requireRole('corporate'), async (req, res) => {
+app.post('/api/corporate/signatory/applications/:id/approve', requireAuth, requireRole('corporate'), requireSubRole('authorized_signatory'), async (req, res) => {
   try {
     const user = (req as any).user;
-    if (user.sub_role !== 'authorized_signatory') {
-      return res.status(403).json({ error: 'authorized_signatory sub_role required' });
-    }
     const { id } = req.params;
     const appCheck = await query(
       `SELECT id FROM organization_applications
@@ -2657,12 +2651,9 @@ app.post('/api/corporate/signatory/applications/:id/approve', requireAuth, requi
 });
 
 // POST /api/corporate/signatory/applications/:id/reject
-app.post('/api/corporate/signatory/applications/:id/reject', requireAuth, requireRole('corporate'), async (req, res) => {
+app.post('/api/corporate/signatory/applications/:id/reject', requireAuth, requireRole('corporate'), requireSubRole('authorized_signatory'), async (req, res) => {
   try {
     const user = (req as any).user;
-    if (user.sub_role !== 'authorized_signatory') {
-      return res.status(403).json({ error: 'authorized_signatory sub_role required' });
-    }
     const { id } = req.params;
     const { rejection_reason } = req.body;
     const appCheck = await query(
