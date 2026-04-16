@@ -2606,6 +2606,85 @@ app.post('/api/organizations/apply',
   }
 );
 
+// ── Signatory: Corporate Applications ────────────────────────────────────────
+
+// GET /api/corporate/signatory/applications — list pending apps for this signatory
+app.get('/api/corporate/signatory/applications', requireAuth, requireRole('corporate'), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (user.sub_role !== 'authorized_signatory') {
+      return res.status(403).json({ error: 'authorized_signatory sub_role required' });
+    }
+    const result = await query(
+      `SELECT oa.*, u.name AS assigned_issuer_name, u.email AS assigned_issuer_email
+       FROM organization_applications oa
+       LEFT JOIN users u ON u.id = oa.assigned_issuer_id
+       WHERE oa.signatory_user_id = $1
+         AND oa.application_status = 'pending'
+       ORDER BY oa.created_at DESC`,
+      [user.id]
+    );
+    res.json({ success: true, applications: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/corporate/signatory/applications/:id/approve
+app.post('/api/corporate/signatory/applications/:id/approve', requireAuth, requireRole('corporate'), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (user.sub_role !== 'authorized_signatory') {
+      return res.status(403).json({ error: 'authorized_signatory sub_role required' });
+    }
+    const { id } = req.params;
+    const appCheck = await query(
+      `SELECT id FROM organization_applications
+       WHERE id = $1 AND signatory_user_id = $2 AND application_status = 'pending'`,
+      [id, user.id]
+    );
+    if (appCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Application not found or not in pending state' });
+    }
+    await query(
+      `UPDATE organization_applications SET application_status = 'signatory_approved' WHERE id = $1`,
+      [id]
+    );
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/corporate/signatory/applications/:id/reject
+app.post('/api/corporate/signatory/applications/:id/reject', requireAuth, requireRole('corporate'), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (user.sub_role !== 'authorized_signatory') {
+      return res.status(403).json({ error: 'authorized_signatory sub_role required' });
+    }
+    const { id } = req.params;
+    const { rejection_reason } = req.body;
+    const appCheck = await query(
+      `SELECT id FROM organization_applications
+       WHERE id = $1 AND signatory_user_id = $2 AND application_status = 'pending'`,
+      [id, user.id]
+    );
+    if (appCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Application not found or not in pending state' });
+    }
+    await query(
+      `UPDATE organization_applications
+       SET application_status = 'rejected', rejection_reason = $1
+       WHERE id = $2`,
+      [rejection_reason || null, id]
+    );
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ─── Portal Manager: Corporate Applications ───────────────────────────────────
 
 app.get('/api/portal/corporate-applications', requireAuth, requireRole('portal_manager'), async (req, res) => {
