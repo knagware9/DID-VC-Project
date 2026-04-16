@@ -71,19 +71,6 @@ export default function OrganizationApplyPage() {
     setError(''); return true;
   }
 
-  async function loadIssuers() {
-    setIssuersLoading(true);
-    try {
-      const res = await fetch('/api/public/did-issuers');
-      const data = await res.json();
-      setIssuers(data.issuers || []);
-    } catch {
-      setError('Failed to load DID Issuers');
-    } finally {
-      setIssuersLoading(false);
-    }
-  }
-
   function validateStep2() {
     const { super_admin_name, super_admin_email, requester_name, requester_email } = people;
     if (!super_admin_name || !super_admin_email || !requester_name || !requester_email) {
@@ -103,6 +90,7 @@ export default function OrganizationApplyPage() {
   function validateStep4() {
     const mcaRef = refs['ref_MCARegistration'];
     if (!mcaRef) { setError('MCA Registration reference number is required'); return false; }
+    if (!files['MCARegistration']) { setError('MCA Registration Certificate file upload is required'); return false; }
     setError(''); return true;
   }
 
@@ -144,8 +132,9 @@ export default function OrganizationApplyPage() {
       });
 
       const res = await fetch('/api/organizations/apply', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Submission failed');
+      let data: any = {};
+      try { data = await res.json(); } catch { /* non-JSON error body */ }
+      if (!res.ok) throw new Error(data.error || `Submission failed (${res.status})`);
       setApplicationId(data.applicationId);
       setSignatoryTempPassword(data.signatory_temp_password || '');
       setStep(6); // success screen
@@ -200,7 +189,7 @@ export default function OrganizationApplyPage() {
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <h1 style={{ color: '#0f172a', fontWeight: 800, fontSize: '1.5rem', marginBottom: '0.25rem' }}>Corporate Registration</h1>
-          <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Step {step} of 5</p>
+          <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Step {Math.min(step, 5)} of 5</p>
         </div>
 
         {/* Progress bar */}
@@ -328,7 +317,24 @@ export default function OrganizationApplyPage() {
 
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <button style={backBtnStyle} onClick={() => setStep(1)}>← Back</button>
-                <button style={{ ...nextBtnStyle, flex: 2 }} onClick={() => { if (validateStep2()) { loadIssuers(); setStep(3); } }}>Next →</button>
+                <button style={{ ...nextBtnStyle, flex: 2 }} onClick={async () => {
+                  if (!validateStep2()) return;
+                  setError('');
+                  setIssuers([]);
+                  setIssuersLoading(true);
+                  try {
+                    const res = await fetch('/api/public/did-issuers');
+                    let data: any = {};
+                    try { data = await res.json(); } catch { /* non-JSON body */ }
+                    if (!res.ok) throw new Error(data.error || 'Failed to load DID Issuers');
+                    setIssuers(data.issuers || []);
+                    setStep(3);
+                  } catch (err: any) {
+                    setError(err.message || 'Failed to load DID Issuers');
+                  } finally {
+                    setIssuersLoading(false);
+                  }
+                }}>Next →</button>
               </div>
             </>
           )}
@@ -345,7 +351,27 @@ export default function OrganizationApplyPage() {
                 <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>Loading issuers…</div>
               ) : issuers.length === 0 ? (
                 <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '1rem', color: '#dc2626', fontSize: '0.875rem' }}>
-                  No DID Issuers available. Please contact support.
+                  <div>No DID Issuers available. Please contact support.</div>
+                  <button
+                    style={{ marginTop: '0.75rem', padding: '0.5rem 1rem', background: '#f1f5f9', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 6, cursor: 'pointer', fontSize: '0.8rem' }}
+                    onClick={async () => {
+                      setError('');
+                      setIssuersLoading(true);
+                      try {
+                        const res = await fetch('/api/public/did-issuers');
+                        let data: any = {};
+                        try { data = await res.json(); } catch { /* non-JSON body */ }
+                        if (!res.ok) throw new Error(data.error || 'Failed to load DID Issuers');
+                        setIssuers(data.issuers || []);
+                      } catch (err: any) {
+                        setError(err.message || 'Failed to load DID Issuers');
+                      } finally {
+                        setIssuersLoading(false);
+                      }
+                    }}
+                  >
+                    ↻ Retry
+                  </button>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
