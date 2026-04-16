@@ -457,3 +457,23 @@ CREATE TABLE IF NOT EXISTS employee_credential_permissions (
 );
 CREATE INDEX IF NOT EXISTS idx_emp_cred_perms_registry
   ON employee_credential_permissions(employee_registry_id);
+
+-- ─── Corporate Registration (2026-04-16) ──────────────────────────────────────
+
+-- New columns on organization_applications for the self-registration flow
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS super_admin_name    VARCHAR(255);
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS super_admin_email   VARCHAR(255);
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS requester_name      VARCHAR(255);
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS requester_email     VARCHAR(255);
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS documents           JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS assigned_issuer_id  UUID REFERENCES users(id);
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS corporate_user_id   UUID REFERENCES users(id);
+
+-- Widen application_status to include 'activated' and 'issued'
+-- (existing values: pending, partial, complete, rejected — keep all of them)
+DO $$
+BEGIN
+  ALTER TABLE organization_applications DROP CONSTRAINT IF EXISTS chk_org_app_status;
+  ALTER TABLE organization_applications ADD CONSTRAINT chk_org_app_status
+    CHECK (application_status IN ('pending', 'partial', 'complete', 'rejected', 'activated', 'issued'));
+END $$;
