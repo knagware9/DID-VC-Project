@@ -538,6 +538,10 @@ ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS signatory_user_id
 ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS maker_id          UUID REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS checker_id        UUID REFERENCES users(id) ON DELETE SET NULL;
 
+-- Widen application_status column to accommodate longer status values
+ALTER TABLE organization_applications
+  ALTER COLUMN application_status TYPE VARCHAR(30);
+
 -- Widen application_status CHECK to include signatory_approved and maker_reviewed
 DO $$
 BEGIN
