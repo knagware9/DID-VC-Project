@@ -41,7 +41,10 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 const corpDocStorage = multer.diskStorage({
   destination: UPLOADS_DIR,
-  filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '-')}`),
+  filename: (_req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '-');
+    cb(null, `${Date.now()}-${safe}`);
+  },
 });
 const corpDocUpload = multer({
   storage: corpDocStorage,
