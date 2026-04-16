@@ -3761,6 +3761,51 @@ app.get('/api/verifier/corporates/:orgId/employees', requireAuth, requireRole('v
   }
 });
 
+// Verifier: available credential types for a specific employee
+// Returns employee's own credential types + corporate types they can share
+app.get('/api/verifier/corporates/:orgId/employees/:empRegistryId/credential-types', requireAuth, requireRole('verifier'), async (req, res) => {
+  try {
+    const { orgId, empRegistryId } = req.params;
+
+    const empCheck = await query(
+      `SELECT er.id, er.sub_did_id FROM employee_registry er
+       WHERE er.id = $1 AND er.corporate_user_id = $2`,
+      [empRegistryId, orgId]
+    );
+    if (empCheck.rows.length === 0) return res.status(404).json({ error: 'Employee not found' });
+
+    const { sub_did_id } = empCheck.rows[0];
+    const types: { type: string; source: string }[] = [];
+
+    // Employee's own credential types (from their sub-DID)
+    if (sub_did_id) {
+      const empCreds = await query(
+        `SELECT DISTINCT credential_type FROM credentials
+         WHERE holder_did_id = $1 AND revoked = false ORDER BY credential_type`,
+        [sub_did_id]
+      );
+      empCreds.rows.forEach((r: any) => types.push({ type: r.credential_type, source: 'employee' }));
+    }
+
+    // Corporate credential types the employee has permission to share
+    const corpPerms = await query(
+      `SELECT credential_type FROM employee_credential_permissions
+       WHERE employee_registry_id = $1 ORDER BY credential_type`,
+      [empRegistryId]
+    );
+    corpPerms.rows.forEach((r: any) => {
+      // Only add as corporate if not already present as an employee type
+      if (!types.find(t => t.type === r.credential_type)) {
+        types.push({ type: r.credential_type, source: 'corporate' });
+      }
+    });
+
+    res.json({ success: true, credential_types: types });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ─── Task 3: Corporate — Employee permission read/write ────────────────────────
 
 // Corporate: get credential sharing permissions for an employee

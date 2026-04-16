@@ -37,7 +37,8 @@ export default function VerifierDashboard() {
   const [corpEmployees, setCorpEmployees] = useState<any[]>([]);
   const [empSearch, setEmpSearch] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
-  const [newReqCredTypes, setNewReqCredTypes] = useState('');
+  const [empCredTypes, setEmpCredTypes] = useState<{ type: string; source: string }[]>([]);
+  const [selectedCredTypes, setSelectedCredTypes] = useState<string[]>([]);
   const [newReqPurpose, setNewReqPurpose] = useState('');
   const [newReqMsg, setNewReqMsg] = useState('');
   const [newReqLoading, setNewReqLoading] = useState(false);
@@ -55,7 +56,7 @@ export default function VerifierDashboard() {
   const canApproveReject = !subRole || ['checker', 'super_admin'].includes(subRole);
 
   useEffect(() => {
-    if (tab === 'new') { loadCorporates(); setReqStep(1); setEmpSearch(''); setNewReqMsg(''); }
+    if (tab === 'new') { loadCorporates(); setReqStep(1); setEmpSearch(''); setNewReqMsg(''); setEmpCredTypes([]); setSelectedCredTypes([]); }
     if (tab === 'requests') loadRequests();
     if (tab === 'received') loadReceived();
     if (tab === 'team') loadTeam();
@@ -112,22 +113,35 @@ export default function VerifierDashboard() {
     } catch {}
   }
 
+  async function loadEmpCredTypes(orgId: string, empRegistryId: string) {
+    if (!token) return;
+    setEmpCredTypes([]);
+    setSelectedCredTypes([]);
+    try {
+      const r = await fetch(
+        `/api/verifier/corporates/${orgId}/employees/${empRegistryId}/credential-types`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const d = await r.json();
+      setEmpCredTypes(d.credential_types || []);
+    } catch {}
+  }
+
   async function handleSendProofRequest() {
     if (!token) return;
-    if (!selectedEmployee || !newReqCredTypes.trim()) {
-      setNewReqMsg('Select an employee and specify at least one credential type');
+    if (!selectedEmployee || selectedCredTypes.length === 0) {
+      setNewReqMsg('Select an employee and at least one credential type');
       return;
     }
     setNewReqLoading(true);
     setNewReqMsg('');
     try {
-      const credTypes = newReqCredTypes.split(',').map((s: string) => s.trim()).filter(Boolean);
       const r = await fetch('/api/verifier/request-proof', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           holderDid: selectedEmployee.employee_did,
-          requiredCredentialTypes: credTypes,
+          requiredCredentialTypes: selectedCredTypes,
           purpose: newReqPurpose,
         }),
       });
@@ -139,7 +153,8 @@ export default function VerifierDashboard() {
       setCorpEmployees([]);
       setSelectedEmployee(null);
       setEmpSearch('');
-      setNewReqCredTypes('');
+      setEmpCredTypes([]);
+      setSelectedCredTypes([]);
       setNewReqPurpose('');
     } catch (err: any) {
       setNewReqMsg(err.message);
@@ -253,7 +268,7 @@ export default function VerifierDashboard() {
               <div className="card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                   <h4 style={{ margin: 0 }}>Select Employee — {selectedCorp.name}</h4>
-                  <button onClick={() => { setReqStep(1); setSelectedCorp(null); setCorpEmployees([]); setSelectedEmployee(null); setEmpSearch(''); }}
+                  <button onClick={() => { setReqStep(1); setSelectedCorp(null); setCorpEmployees([]); setSelectedEmployee(null); setEmpSearch(''); setEmpCredTypes([]); setSelectedCredTypes([]); }}
                     style={{ fontSize: '0.75rem', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}>
                     ← Back
                   </button>
@@ -277,7 +292,7 @@ export default function VerifierDashboard() {
                       )
                       .map((emp: any) => (
                         <div key={emp.id}
-                          onClick={() => { setSelectedEmployee(emp); setReqStep(3); }}
+                          onClick={() => { setSelectedEmployee(emp); loadEmpCredTypes(selectedCorp!.id, emp.id); setReqStep(3); }}
                           style={{ padding: '12px', border: `2px solid ${selectedEmployee?.id === emp.id ? '#2563eb' : '#e2e8f0'}`,
                             borderRadius: 8, cursor: 'pointer', background: selectedEmployee?.id === emp.id ? '#eff6ff' : 'white' }}>
                           <div style={{ fontWeight: 700 }}>{emp.name}</div>
@@ -308,16 +323,73 @@ export default function VerifierDashboard() {
                 </div>
 
                 <div className="form-group">
-                  <label style={{ fontWeight: 600 }}>Required Credential Types *</label>
-                  <input
-                    className="form-input"
-                    placeholder="e.g. EmploymentCertificate, IECCredential"
-                    value={newReqCredTypes}
-                    onChange={e => setNewReqCredTypes(e.target.value)}
-                  />
-                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 4 }}>
-                    Comma-separated. Employee sees these highlighted in their wallet.
-                  </div>
+                  <label style={{ fontWeight: 600, marginBottom: '0.5rem', display: 'block' }}>Required Credential Types *</label>
+
+                  {empCredTypes.length === 0 ? (
+                    <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Loading available credentials…</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                      {/* Employee Wallet section */}
+                      {empCredTypes.filter(ct => ct.source === 'employee').length > 0 && (
+                        <div style={{ marginBottom: '0.4rem' }}>
+                          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#2563eb', marginBottom: '0.35rem' }}>
+                            👤 Employee Wallet
+                          </div>
+                          {empCredTypes.filter(ct => ct.source === 'employee').map(ct => (
+                            <label key={ct.type} style={{
+                              display: 'flex', alignItems: 'center', gap: '0.5rem',
+                              fontSize: '0.85rem', cursor: 'pointer', padding: '6px 10px', borderRadius: 6,
+                              background: selectedCredTypes.includes(ct.type) ? '#eff6ff' : '#f8fafc',
+                              border: `1px solid ${selectedCredTypes.includes(ct.type) ? '#93c5fd' : '#e2e8f0'}`,
+                              marginBottom: '0.3rem'
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedCredTypes.includes(ct.type)}
+                                onChange={() => setSelectedCredTypes(prev =>
+                                  prev.includes(ct.type) ? prev.filter(t => t !== ct.type) : [...prev, ct.type]
+                                )}
+                              />
+                              {ct.type}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Corporate Wallet section */}
+                      {empCredTypes.filter(ct => ct.source === 'corporate').length > 0 && (
+                        <div>
+                          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#7c3aed', marginBottom: '0.35rem' }}>
+                            🏢 Corporate Wallet
+                          </div>
+                          {empCredTypes.filter(ct => ct.source === 'corporate').map(ct => (
+                            <label key={ct.type} style={{
+                              display: 'flex', alignItems: 'center', gap: '0.5rem',
+                              fontSize: '0.85rem', cursor: 'pointer', padding: '6px 10px', borderRadius: 6,
+                              background: selectedCredTypes.includes(ct.type) ? '#faf5ff' : '#f8fafc',
+                              border: `1px solid ${selectedCredTypes.includes(ct.type) ? '#c4b5fd' : '#e2e8f0'}`,
+                              marginBottom: '0.3rem'
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedCredTypes.includes(ct.type)}
+                                onChange={() => setSelectedCredTypes(prev =>
+                                  prev.includes(ct.type) ? prev.filter(t => t !== ct.type) : [...prev, ct.type]
+                                )}
+                              />
+                              {ct.type}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+
+                      {selectedCredTypes.length > 0 && (
+                        <div style={{ fontSize: '0.72rem', color: '#16a34a', marginTop: '0.1rem' }}>
+                          {selectedCredTypes.length} type{selectedCredTypes.length > 1 ? 's' : ''} selected
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-group">
