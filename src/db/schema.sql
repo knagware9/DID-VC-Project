@@ -466,8 +466,51 @@ ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS super_admin_email
 ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS requester_name      VARCHAR(255);
 ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS requester_email     VARCHAR(255);
 ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS documents           JSONB NOT NULL DEFAULT '[]';
-ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS assigned_issuer_id  UUID REFERENCES users(id);
-ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS corporate_user_id   UUID REFERENCES users(id);
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS assigned_issuer_id  UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS corporate_user_id   UUID REFERENCES users(id) ON DELETE SET NULL;
+
+-- Fix ON DELETE behavior for FK constraints (idempotent — safe to run if constraint already exists)
+DO $$
+DECLARE
+  con_name TEXT;
+BEGIN
+  -- Fix assigned_issuer_id FK
+  SELECT c.conname INTO con_name
+  FROM pg_constraint c
+  JOIN pg_attribute a ON a.attnum = ANY(c.conkey) AND a.attrelid = c.conrelid
+  JOIN pg_class t ON t.oid = c.conrelid
+  WHERE t.relname = 'organization_applications'
+    AND a.attname = 'assigned_issuer_id'
+    AND c.contype = 'f';
+  IF con_name IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE organization_applications DROP CONSTRAINT ' || quote_ident(con_name);
+  END IF;
+  ALTER TABLE organization_applications
+    ADD CONSTRAINT org_app_assigned_issuer_fk
+    FOREIGN KEY (assigned_issuer_id) REFERENCES users(id) ON DELETE SET NULL;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+DECLARE
+  con_name TEXT;
+BEGIN
+  -- Fix corporate_user_id FK
+  SELECT c.conname INTO con_name
+  FROM pg_constraint c
+  JOIN pg_attribute a ON a.attnum = ANY(c.conkey) AND a.attrelid = c.conrelid
+  JOIN pg_class t ON t.oid = c.conrelid
+  WHERE t.relname = 'organization_applications'
+    AND a.attname = 'corporate_user_id'
+    AND c.contype = 'f';
+  IF con_name IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE organization_applications DROP CONSTRAINT ' || quote_ident(con_name);
+  END IF;
+  ALTER TABLE organization_applications
+    ADD CONSTRAINT org_app_corporate_user_fk
+    FOREIGN KEY (corporate_user_id) REFERENCES users(id) ON DELETE SET NULL;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Widen application_status to include 'activated' and 'issued'
 -- (existing values: pending, partial, complete, rejected — keep all of them)
@@ -477,3 +520,7 @@ BEGIN
   ALTER TABLE organization_applications ADD CONSTRAINT chk_org_app_status
     CHECK (application_status IN ('pending', 'partial', 'complete', 'rejected', 'activated', 'issued'));
 END $$;
+
+-- Indexes for the new FK columns (used in hot-path queries)
+CREATE INDEX IF NOT EXISTS idx_org_app_assigned_issuer ON organization_applications(assigned_issuer_id);
+CREATE INDEX IF NOT EXISTS idx_org_app_corporate_user  ON organization_applications(corporate_user_id);
