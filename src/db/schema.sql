@@ -481,7 +481,9 @@ BEGIN
   JOIN pg_class t ON t.oid = c.conrelid
   WHERE t.relname = 'organization_applications'
     AND a.attname = 'assigned_issuer_id'
-    AND c.contype = 'f';
+    AND c.contype = 'f'
+    AND c.conname != 'org_app_assigned_issuer_fk'
+  LIMIT 1;
   IF con_name IS NOT NULL THEN
     EXECUTE 'ALTER TABLE organization_applications DROP CONSTRAINT ' || quote_ident(con_name);
   END IF;
@@ -502,7 +504,9 @@ BEGIN
   JOIN pg_class t ON t.oid = c.conrelid
   WHERE t.relname = 'organization_applications'
     AND a.attname = 'corporate_user_id'
-    AND c.contype = 'f';
+    AND c.contype = 'f'
+    AND c.conname != 'org_app_corporate_user_fk'
+  LIMIT 1;
   IF con_name IS NOT NULL THEN
     EXECUTE 'ALTER TABLE organization_applications DROP CONSTRAINT ' || quote_ident(con_name);
   END IF;
