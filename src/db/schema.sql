@@ -528,3 +528,29 @@ END $$;
 -- Indexes for the new FK columns (used in hot-path queries)
 CREATE INDEX IF NOT EXISTS idx_org_app_assigned_issuer ON organization_applications(assigned_issuer_id);
 CREATE INDEX IF NOT EXISTS idx_org_app_corporate_user  ON organization_applications(corporate_user_id);
+
+-- ── Signatory + Maker-Checker flow ───────────────────────────────────────────
+
+-- New columns on organization_applications
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS signatory_name    VARCHAR(255);
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS signatory_email   VARCHAR(255);
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS signatory_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS maker_id          UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE organization_applications ADD COLUMN IF NOT EXISTS checker_id        UUID REFERENCES users(id) ON DELETE SET NULL;
+
+-- Widen application_status CHECK to include signatory_approved and maker_reviewed
+DO $$
+BEGIN
+  ALTER TABLE organization_applications DROP CONSTRAINT IF EXISTS chk_org_app_status;
+  ALTER TABLE organization_applications ADD CONSTRAINT chk_org_app_status
+    CHECK (application_status IN (
+      'pending', 'partial', 'complete',
+      'signatory_approved', 'maker_reviewed',
+      'activated', 'issued', 'rejected'
+    ));
+END $$;
+
+-- Indexes for the new FK columns
+CREATE INDEX IF NOT EXISTS idx_org_app_signatory ON organization_applications(signatory_user_id);
+CREATE INDEX IF NOT EXISTS idx_org_app_maker     ON organization_applications(maker_id);
+CREATE INDEX IF NOT EXISTS idx_org_app_checker   ON organization_applications(checker_id);
