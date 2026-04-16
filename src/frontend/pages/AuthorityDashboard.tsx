@@ -806,7 +806,7 @@ export default function AuthorityDashboard() {
                 </div>
                 <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.75rem' }}>
                   Submitted: {app.created_at ? new Date(app.created_at).toLocaleDateString() : '—'}
-                  {app.maker_name && <span> · Reviewed by: {app.maker_name}</span>}
+                  {subRole !== 'maker' && app.maker_name && <span> · Reviewed by: {app.maker_name}</span>}
                 </div>
 
                 {/* Documents */}
