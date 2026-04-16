@@ -62,6 +62,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
   portal_manager: [
     { tab: 'overview',       label: 'Overview',                   icon: '🏠' },
     { tab: 'entities',       label: 'Issuer & Trusted Endorser',  icon: '🌐' },
+    { tab: 'applications',   label: 'Corp Applications',          icon: '📋' },
     { tab: 'entity-onboard', label: 'Onboard Entity',             icon: '➕', subRoles: ['super_admin', 'maker'] },
     { tab: 'admin-team',     label: 'Admin Team',                 icon: '👥', subRoles: ['super_admin'] },
     { tab: 'dids',           label: 'DID Registry',               icon: '🔑', subRoles: ['super_admin'] },
