@@ -2396,48 +2396,98 @@ app.get('/api/public/did-issuers', async (_req, res) => {
 
 // ── Organization Application Routes ──────────────────────────────────────
 
-app.post('/api/organizations/apply', async (req, res) => {
-  try {
-    const {
-      org_name, email, org_logo_url,
-      director_full_name, aadhaar_number, dob, gender, state, pincode,
-      company_name, cin, company_status, company_category, date_of_incorporation,
-      pan_number, gstn, ie_code,
-      director_name, din, designation, signing_authority_level
-    } = req.body;
+app.post('/api/organizations/apply',
+  corpDocUpload.fields([
+    { name: 'doc_MCARegistration', maxCount: 1 },
+    { name: 'doc_GSTINCredential', maxCount: 1 },
+    { name: 'doc_IECCredential',   maxCount: 1 },
+    { name: 'doc_PANCredential',   maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      // multer puts text fields in req.body and files in req.files
+      const {
+        org_name, email, org_logo_url,
+        director_full_name, aadhaar_number, dob, gender, state, pincode,
+        company_name, cin, company_status, company_category, date_of_incorporation,
+        pan_number, gstn, ie_code,
+        director_name, din, designation, signing_authority_level,
+        // new fields
+        super_admin_name, super_admin_email,
+        requester_name, requester_email,
+        documents: documentsJson,
+      } = req.body as Record<string, string>;
 
-    const required = [org_name, email, director_full_name, aadhaar_number, dob, gender,
-      state, pincode, company_name, cin, company_status, company_category,
-      date_of_incorporation, pan_number, gstn, ie_code, director_name, din, designation];
-    if (required.some(v => !v)) {
-      return res.status(400).json({ error: 'All required fields must be provided' });
+      // Validate required fields
+      const requiredFields = [org_name, email, director_full_name, state, pincode,
+        company_name, cin, company_status, company_category,
+        date_of_incorporation, pan_number, company_name,
+        super_admin_name, super_admin_email, requester_name, requester_email];
+      if (requiredFields.some(v => !v)) {
+        return res.status(400).json({ error: 'All required fields must be provided' });
+      }
+
+      // Duplicate CIN check
+      const existing = await query('SELECT id FROM organization_applications WHERE cin = $1', [cin]);
+      if (existing.rows.length > 0) {
+        return res.status(400).json({ error: 'An application with this CIN already exists' });
+      }
+
+      // Parse documents JSON; attach file_paths from uploaded files
+      let documents: any[] = [];
+      try {
+        documents = JSON.parse(documentsJson || '[]');
+      } catch {
+        return res.status(400).json({ error: 'Invalid documents JSON' });
+      }
+
+      const files = (req.files as Record<string, Express.Multer.File[]>) || {};
+      documents = documents.map((doc: any) => {
+        const fileField = `doc_${doc.vc_type}`;
+        const uploaded = files[fileField]?.[0];
+        return {
+          ...doc,
+          file_path: uploaded
+            ? `uploads/corporate-docs/${uploaded.filename}`
+            : null,
+        };
+      });
+
+      // Validate MCA (required) document
+      const mcaDoc = documents.find((d: any) => d.vc_type === 'MCARegistration');
+      if (!mcaDoc) {
+        return res.status(400).json({ error: 'MCA Registration document is required' });
+      }
+
+      const result = await query(
+        `INSERT INTO organization_applications
+          (org_name, email, org_logo_url, director_full_name, aadhaar_number, dob, gender,
+           state, pincode, company_name, cin, company_status, company_category,
+           date_of_incorporation, pan_number, gstn, ie_code, director_name, din, designation,
+           signing_authority_level,
+           super_admin_name, super_admin_email, requester_name, requester_email, documents)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+                 $22,$23,$24,$25,$26)
+         RETURNING id`,
+        [
+          org_name, email, org_logo_url || null,
+          director_full_name || '', aadhaar_number || '', dob || '1990-01-01', gender || '',
+          state, pincode, company_name, cin,
+          company_status || 'Active', company_category || 'Private Limited',
+          date_of_incorporation, pan_number, gstn || '', ie_code || '',
+          director_name || '', din || '', designation || '', signing_authority_level || 'Single Signatory',
+          super_admin_name, super_admin_email, requester_name, requester_email,
+          JSON.stringify(documents),
+        ]
+      );
+
+      res.json({ success: true, applicationId: result.rows[0].id });
+    } catch (error: any) {
+      console.error('Apply error:', error);
+      res.status(500).json({ error: error.message });
     }
-
-    const existing = await query('SELECT id FROM organization_applications WHERE cin = $1', [cin]);
-    if (existing.rows.length > 0) {
-      return res.status(400).json({ error: 'An application with this CIN already exists' });
-    }
-
-    const result = await query(
-      `INSERT INTO organization_applications
-        (org_name, email, org_logo_url, director_full_name, aadhaar_number, dob, gender,
-         state, pincode, company_name, cin, company_status, company_category,
-         date_of_incorporation, pan_number, gstn, ie_code, director_name, din, designation,
-         signing_authority_level)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
-       RETURNING id`,
-      [org_name, email, org_logo_url || null, director_full_name, aadhaar_number, dob, gender,
-       state, pincode, company_name, cin, company_status, company_category,
-       date_of_incorporation, pan_number, gstn, ie_code, director_name, din, designation,
-       signing_authority_level || 'Single Signatory']
-    );
-
-    res.json({ success: true, applicationId: result.rows[0].id });
-  } catch (error: any) {
-    console.error('Apply error:', error);
-    res.status(500).json({ error: error.message });
   }
-});
+);
 
 app.get('/api/authority/organizations', requireAuth, requireRole('government_agency'), async (req, res) => {
   try {
