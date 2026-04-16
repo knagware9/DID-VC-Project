@@ -2540,47 +2540,65 @@ app.post('/api/organizations/apply',
         return res.status(400).json({ error: 'MCA Registration document is required' });
       }
 
-      // Create signatory account (org_id = NULL — patched at issuance)
+      // Guard: signatory email must not already exist
+      const emailCheck = await query(
+        'SELECT id FROM users WHERE email = $1',
+        [signatory_email]
+      );
+      if (emailCheck.rows.length > 0) {
+        return res.status(400).json({ error: 'Signatory email is already registered' });
+      }
+
+      // Create signatory account + insert application in a single transaction
       const signatoryTempPass = crypto.randomBytes(8).toString('hex');
       const signatoryHash = await hashPassword(signatoryTempPass);
-      const signatoryResult = await query(
-        `INSERT INTO users (email, password_hash, role, name, sub_role, org_id)
-         VALUES ($1, $2, 'corporate', $3, 'authorized_signatory', NULL)
-         RETURNING id`,
-        [signatory_email, signatoryHash, signatory_name]
-      );
-      const signatoryUserId = signatoryResult.rows[0].id;
-      console.log(`[SUBMITTED] signatory: ${signatory_email} | password: ${signatoryTempPass}`);
 
-      const result = await query(
-        `INSERT INTO organization_applications
-          (org_name, email, org_logo_url, director_full_name, aadhaar_number, dob, gender,
-           state, pincode, company_name, cin, company_status, company_category,
-           date_of_incorporation, pan_number, gstn, ie_code, director_name, din, designation,
-           signing_authority_level,
-           super_admin_name, super_admin_email, requester_name, requester_email, documents,
-           signatory_name, signatory_email, signatory_user_id, assigned_issuer_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
-                 $22,$23,$24,$25,$26,$27,$28,$29,$30)
-         RETURNING id`,
-        [
-          org_name, email, org_logo_url || null,
-          director_full_name || '', aadhaar_number || '', dob || '1990-01-01', gender || '',
-          state, pincode, company_name, cin,
-          company_status || 'Active', company_category || 'Private Limited',
-          date_of_incorporation, pan_number, gstn || '', ie_code || '',
-          director_name || '', din || '', designation || '', signing_authority_level || 'Single Signatory',
-          super_admin_name, super_admin_email, requester_name, requester_email,
-          JSON.stringify(documents),
-          signatory_name, signatory_email, signatoryUserId, assigned_issuer_id,
-        ]
-      );
+      await query('BEGIN', []);
+      try {
+        const signatoryResult = await query(
+          `INSERT INTO users (email, password_hash, role, name, sub_role, org_id)
+           VALUES ($1, $2, 'corporate', $3, 'authorized_signatory', NULL)
+           RETURNING id`,
+          [signatory_email, signatoryHash, signatory_name]
+        );
+        const signatoryUserId = signatoryResult.rows[0].id;
 
-      res.json({
-        success: true,
-        applicationId: result.rows[0].id,
-        signatory_temp_password: signatoryTempPass,
-      });
+        const result = await query(
+          `INSERT INTO organization_applications
+            (org_name, email, org_logo_url, director_full_name, aadhaar_number, dob, gender,
+             state, pincode, company_name, cin, company_status, company_category,
+             date_of_incorporation, pan_number, gstn, ie_code, director_name, din, designation,
+             signing_authority_level,
+             super_admin_name, super_admin_email, requester_name, requester_email, documents,
+             signatory_name, signatory_email, signatory_user_id, assigned_issuer_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+                   $22,$23,$24,$25,$26,$27,$28,$29,$30)
+           RETURNING id`,
+          [
+            org_name, email, org_logo_url || null,
+            director_full_name || '', aadhaar_number || '', dob || '1990-01-01', gender || '',
+            state, pincode, company_name, cin,
+            company_status || 'Active', company_category || 'Private Limited',
+            date_of_incorporation, pan_number, gstn || '', ie_code || '',
+            director_name || '', din || '', designation || '', signing_authority_level || 'Single Signatory',
+            super_admin_name, super_admin_email, requester_name, requester_email,
+            JSON.stringify(documents),
+            signatory_name, signatory_email, signatoryUserId, assigned_issuer_id,
+          ]
+        );
+
+        await query('COMMIT', []);
+        console.log(`[SUBMITTED] signatory: ${signatory_email} | password: ${signatoryTempPass}`);
+
+        res.json({
+          success: true,
+          applicationId: result.rows[0].id,
+          signatory_temp_password: signatoryTempPass,
+        });
+      } catch (txErr: any) {
+        await query('ROLLBACK', []);
+        throw txErr;
+      }
     } catch (error: any) {
       console.error('Apply error:', error);
       res.status(500).json({ error: error.message });
