@@ -5,6 +5,9 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
 import { runMigrations } from '../db/migrate.js';
 import { query } from '../db/index.js';
 import { getBesuService } from '../blockchain/besu.js';
@@ -29,6 +32,25 @@ const PORT = process.env.PORT || 3002;
 
 app.use(cors());
 app.use(express.json());
+
+// ─── File Uploads ─────────────────────────────────────────────────────────────
+
+const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'corporate-docs');
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+const corpDocStorage = multer.diskStorage({
+  destination: UPLOADS_DIR,
+  filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '-')}`),
+});
+const corpDocUpload = multer({
+  storage: corpDocStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png'];
+    cb(null, allowed.includes(file.mimetype));
+  },
+});
 
 // ─── Auth Middleware ──────────────────────────────────────────────────────────
 
@@ -2349,6 +2371,25 @@ function buildDIAVC(authorityType: string, org: any, issuerDid: any, holderDid: 
   };
   return { ...base, ...subjectMap[authorityType] };
 }
+
+// ─── Public Endpoints ─────────────────────────────────────────────────────────
+
+// Returns all active DID issuers — used on landing page + Portal Manager dropdown
+app.get('/api/public/did-issuers', async (_req, res) => {
+  try {
+    const result = await query(
+      `SELECT u.id, u.name, u.email
+       FROM users u
+       WHERE u.role = 'government_agency'
+         AND u.sub_role = 'did_issuer_admin'
+       ORDER BY u.name`,
+      []
+    );
+    res.json({ success: true, issuers: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ── Organization Application Routes ──────────────────────────────────────
 
