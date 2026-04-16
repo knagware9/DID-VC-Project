@@ -422,7 +422,7 @@ app.post('/api/vc-requests', requireAuth, requireRole('corporate'), async (req, 
       DGFTExportLicense:                  'Directorate General of Foreign Trade (DGFT)',
       TradeLicense:                       'Directorate General of Foreign Trade (DGFT)',
       // IBDIC — DID Issuer
-      IBDICDigitalIdentityCredential:     'IBDIC \u2014 Indian Blockchain DID Council',
+      IBDICDigitalIdentityCredential:     "IBDIC \u2014 Indian Banks' Digital Infrastructure Company",
       // MCA — DID Issuer
       MCARegistration:                    'Ministry of Corporate Affairs (MCA)',
       CompanyRegistrationCredential:      'Ministry of Corporate Affairs (MCA)',

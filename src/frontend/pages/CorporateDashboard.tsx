@@ -977,7 +977,7 @@ return (
                           ))
                         : (
                           <>
-                            <option value="ibdic">IBDIC — Indian Blockchain DID Council</option>
+                            <option value="ibdic">IBDIC — Indian Banks' Digital Infrastructure Company</option>
                             <option value="dgft">DGFT — Directorate General of Foreign Trade</option>
                           </>
                         )
