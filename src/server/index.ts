@@ -2701,83 +2701,58 @@ app.get('/api/portal/corporate-applications', requireAuth, requireRole('portal_m
   }
 });
 
-app.post('/api/portal/corporate-applications/:id/activate', requireAuth, requireRole('portal_manager'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { assigned_issuer_id } = req.body;
-    if (!assigned_issuer_id) return res.status(400).json({ error: 'assigned_issuer_id required' });
-
-    // Validate issuer is a did_issuer_admin
-    const issuerCheck = await query(
-      `SELECT id FROM users WHERE id = $1 AND role = 'government_agency' AND sub_role = 'did_issuer_admin'`,
-      [assigned_issuer_id]
-    );
-    if (issuerCheck.rows.length === 0) {
-      return res.status(400).json({ error: 'User is not a valid DID Issuer' });
-    }
-
-    const appCheck = await query(
-      `SELECT id FROM organization_applications WHERE id = $1 AND application_status = 'pending'`,
-      [id]
-    );
-    if (appCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Application not found or not in pending state' });
-    }
-
-    await query(
-      `UPDATE organization_applications
-       SET application_status = 'activated', assigned_issuer_id = $1
-       WHERE id = $2`,
-      [assigned_issuer_id, id]
-    );
-    res.json({ success: true });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/portal/corporate-applications/:id/reject', requireAuth, requireRole('portal_manager'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { rejection_reason } = req.body;
-
-    const appCheck = await query(
-      `SELECT id FROM organization_applications WHERE id = $1 AND application_status = 'pending'`,
-      [id]
-    );
-    if (appCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Application not found or not in pending state' });
-    }
-
-    await query(
-      `UPDATE organization_applications
-       SET application_status = 'rejected', rejection_reason = $1
-       WHERE id = $2`,
-      [rejection_reason || null, id]
-    );
-    res.json({ success: true });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // ─── DID Issuer: Corporate Applications ──────────────────────────────────────
+
+// POST /api/did-issuer/corporate-applications/:id/maker-review
+app.post('/api/did-issuer/corporate-applications/:id/maker-review', requireAuth, requireRole('government_agency'), requireSubRole('maker'), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { id } = req.params;
+    const appCheck = await query(
+      `SELECT id FROM organization_applications
+       WHERE id = $1 AND assigned_issuer_id = $2 AND application_status = 'signatory_approved'`,
+      [id, user.org_id]
+    );
+    if (appCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Application not found or not in signatory_approved state' });
+    }
+    await query(
+      `UPDATE organization_applications
+       SET application_status = 'maker_reviewed', maker_id = $1
+       WHERE id = $2`,
+      [user.id, id]
+    );
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 app.get('/api/did-issuer/corporate-applications', requireAuth, requireRole('government_agency'), async (req, res) => {
   try {
-    const issuerId = (req as any).user.id;
-    const subRole: string = (req as any).user.sub_role || '';
-    if (subRole !== 'did_issuer_admin') {
-      return res.status(403).json({ error: 'did_issuer_admin sub_role required' });
+    const user = (req as any).user;
+    const subRole: string = user.sub_role || '';
+    // Determine which status to show based on sub_role
+    let statusFilter: string;
+    if (subRole === 'maker') {
+      statusFilter = 'signatory_approved';
+    } else if (subRole === 'checker' || subRole === 'super_admin') {
+      statusFilter = 'maker_reviewed';
+    } else {
+      return res.status(403).json({ error: 'maker, checker, or super_admin sub_role required' });
     }
     const result = await query(
-      `SELECT id, org_name, company_name, cin, pan_number,
-              super_admin_name, super_admin_email, requester_name, requester_email,
-              documents, application_status, created_at
-       FROM organization_applications
-       WHERE assigned_issuer_id = $1 AND application_status = 'activated'
-       ORDER BY created_at DESC`,
-      [issuerId]
+      `SELECT oa.id, oa.org_name, oa.company_name, oa.cin, oa.pan_number,
+              oa.super_admin_name, oa.super_admin_email,
+              oa.requester_name, oa.requester_email,
+              oa.signatory_name, oa.signatory_email,
+              oa.documents, oa.application_status, oa.created_at,
+              mu.name AS maker_name
+       FROM organization_applications oa
+       LEFT JOIN users mu ON mu.id = oa.maker_id
+       WHERE oa.assigned_issuer_id = $1 AND oa.application_status = $2
+       ORDER BY oa.created_at DESC`,
+      [user.org_id, statusFilter]
     );
     res.json({ success: true, applications: result.rows });
   } catch (error: any) {
@@ -2787,10 +2762,10 @@ app.get('/api/did-issuer/corporate-applications', requireAuth, requireRole('gove
 
 app.post('/api/did-issuer/corporate-applications/:id/issue', requireAuth, requireRole('government_agency'), async (req, res) => {
   try {
-    const issuerId = (req as any).user.id;
-    const subRole: string = (req as any).user.sub_role || '';
-    if (subRole !== 'did_issuer_admin') {
-      return res.status(403).json({ error: 'did_issuer_admin sub_role required' });
+    const user = (req as any).user;
+    const subRole: string = user.sub_role || '';
+    if (subRole !== 'checker' && subRole !== 'super_admin') {
+      return res.status(403).json({ error: 'checker or super_admin sub_role required' });
     }
 
     const { id } = req.params;
@@ -2806,14 +2781,14 @@ app.post('/api/did-issuer/corporate-applications/:id/issue', requireAuth, requir
     );
     if (appResult.rows.length === 0) return res.status(404).json({ error: 'Application not found' });
     const app = appResult.rows[0];
-    if (app.application_status !== 'activated') return res.status(400).json({ error: 'Application is not in activated state' });
-    if (app.assigned_issuer_id !== issuerId) return res.status(403).json({ error: 'Application is assigned to a different issuer' });
+    if (app.application_status !== 'maker_reviewed') return res.status(400).json({ error: 'Application is not in maker_reviewed state' });
+    if (app.assigned_issuer_id !== user.org_id) return res.status(403).json({ error: 'Application is assigned to a different issuer org' });
 
-    // Load issuer's parent DID for signing
+    // Load issuer org's parent DID for signing (owned by super_admin = org_id)
     const issuerDidResult = await query(
       `SELECT id, did_string, private_key_encrypted FROM dids
        WHERE user_id = $1 AND did_type = 'parent' ORDER BY created_at DESC LIMIT 1`,
-      [issuerId]
+      [user.org_id]
     );
     if (issuerDidResult.rows.length === 0) return res.status(400).json({ error: 'Issuer has no parent DID' });
     const issuerDid = issuerDidResult.rows[0];
@@ -2838,6 +2813,14 @@ app.post('/api/did-issuer/corporate-applications/:id/issue', requireAuth, requir
 
       // 2. Set org_id = superAdminId (self-owns)
       await query(`UPDATE users SET org_id = $1 WHERE id = $1`, [superAdminId]);
+
+      // 2b. Patch signatory's org_id now that super_admin exists
+      if (app.signatory_user_id) {
+        await query(
+          `UPDATE users SET org_id = $1 WHERE id = $2`,
+          [superAdminId, app.signatory_user_id]
+        );
+      }
 
       // 3. Create corporate parent DID
       const slug = app.company_name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
@@ -2864,9 +2847,9 @@ app.post('/api/did-issuer/corporate-applications/:id/issue', requireAuth, requir
       // 6. Mark application as issued
       await query(
         `UPDATE organization_applications
-         SET application_status = 'issued', corporate_user_id = $1
-         WHERE id = $2`,
-        [superAdminId, id]
+         SET application_status = 'issued', corporate_user_id = $1, checker_id = $2
+         WHERE id = $3`,
+        [superAdminId, user.id, id]
       );
 
       await query('COMMIT', []);
