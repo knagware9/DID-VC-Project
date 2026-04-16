@@ -2485,7 +2485,7 @@ app.post('/api/organizations/apply',
       } = req.body as Record<string, string>;
 
       // Validate required fields
-      const requiredFields = [org_name, email, director_full_name, state, pincode,
+      const requiredFields = [org_name, email, state, pincode,
         company_name, cin, company_status, company_category,
         date_of_incorporation, pan_number,
         super_admin_name, super_admin_email, requester_name, requester_email];
