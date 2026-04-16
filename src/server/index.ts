@@ -3444,7 +3444,12 @@ app.get('/api/corporate/team', requireAuth, requireRole('corporate'), async (req
     }
     const orgId = user.org_id || user.id;
     const rows = await query(
-      `SELECT id, email, name, sub_role, created_at FROM users WHERE org_id = $1 ORDER BY created_at DESC`,
+      `SELECT u.id, u.email, u.name, u.sub_role, u.created_at,
+              er.id AS employee_registry_id
+       FROM users u
+       LEFT JOIN employee_registry er ON er.user_id = u.id
+       WHERE u.org_id = $1
+       ORDER BY u.created_at DESC`,
       [orgId]
     );
     res.json({ team: rows.rows });
@@ -3719,7 +3724,7 @@ app.get('/api/ledger/did/:did', requireAuth, async (req, res) => {
 app.get('/api/verifier/corporates', requireAuth, requireRole('verifier'), async (req, res) => {
   try {
     const result = await query(
-      `SELECT u.id, u.name, u.email,
+      `SELECT DISTINCT ON (u.id) u.id, u.name, u.email,
               d.did_string,
               (SELECT COUNT(*) FROM employee_registry er WHERE er.corporate_user_id = u.id) AS employee_count
        FROM users u
@@ -3727,7 +3732,7 @@ app.get('/api/verifier/corporates', requireAuth, requireRole('verifier'), async 
        WHERE u.role = 'corporate'
          AND u.sub_role = 'super_admin'
          AND u.org_id = u.id
-       ORDER BY u.name`,
+       ORDER BY u.id, u.name`,
       []
     );
     res.json({ success: true, corporates: result.rows });
