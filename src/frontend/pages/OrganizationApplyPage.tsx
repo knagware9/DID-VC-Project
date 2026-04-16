@@ -26,6 +26,15 @@ export default function OrganizationApplyPage() {
   const [error, setError] = useState('');
   const [applicationId, setApplicationId] = useState('');
 
+  // Signatory
+  const [signatory, setSignatory] = useState({ name: '', email: '' });
+  const [signatoryTempPassword, setSignatoryTempPassword] = useState('');
+
+  // DID Issuer
+  const [issuers, setIssuers] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [selectedIssuerId, setSelectedIssuerId] = useState('');
+  const [issuersLoading, setIssuersLoading] = useState(false);
+
   // Step 1 — Company Info
   const [form, setForm] = useState({
     org_name: '', cin: '', pan_number: '', gstn: '', state: '', pincode: '',
@@ -62,15 +71,36 @@ export default function OrganizationApplyPage() {
     setError(''); return true;
   }
 
+  async function loadIssuers() {
+    setIssuersLoading(true);
+    try {
+      const res = await fetch('/api/public/did-issuers');
+      const data = await res.json();
+      setIssuers(data.issuers || []);
+    } catch {
+      setError('Failed to load DID Issuers');
+    } finally {
+      setIssuersLoading(false);
+    }
+  }
+
   function validateStep2() {
     const { super_admin_name, super_admin_email, requester_name, requester_email } = people;
     if (!super_admin_name || !super_admin_email || !requester_name || !requester_email) {
       setError('All key people fields are required'); return false;
     }
+    if (!signatory.name || !signatory.email) {
+      setError('Authorized Signatory name and email are required'); return false;
+    }
     setError(''); return true;
   }
 
   function validateStep3() {
+    if (!selectedIssuerId) { setError('Please select a DID Issuer'); return false; }
+    setError(''); return true;
+  }
+
+  function validateStep4() {
     const mcaRef = refs['ref_MCARegistration'];
     if (!mcaRef) { setError('MCA Registration reference number is required'); return false; }
     setError(''); return true;
@@ -100,6 +130,11 @@ export default function OrganizationApplyPage() {
           reference_number: refs[b.reference_field] || '',
           required: b.required,
         }));
+      // Signatory + issuer
+      fd.append('signatory_name', signatory.name);
+      fd.append('signatory_email', signatory.email);
+      fd.append('assigned_issuer_id', selectedIssuerId);
+
       fd.append('documents', JSON.stringify(documents));
 
       // File uploads
@@ -112,7 +147,8 @@ export default function OrganizationApplyPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Submission failed');
       setApplicationId(data.applicationId);
-      setStep(5); // success screen
+      setSignatoryTempPassword(data.signatory_temp_password || '');
+      setStep(6); // success screen
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -121,7 +157,7 @@ export default function OrganizationApplyPage() {
   }
 
   // ── Success screen ──
-  if (step === 5) {
+  if (step === 6) {
     return (
       <div style={{ minHeight: '100vh', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
         <div style={{ background: 'white', borderRadius: 12, padding: '2.5rem', maxWidth: 480, width: '100%', textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
@@ -133,8 +169,20 @@ export default function OrganizationApplyPage() {
           <code style={{ background: '#f1f5f9', padding: '0.5rem 1rem', borderRadius: 6, fontSize: '0.8rem', color: '#1e293b', display: 'block', marginBottom: '1.5rem', wordBreak: 'break-all' }}>
             {applicationId}
           </code>
+          {signatoryTempPassword && (
+            <>
+              <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '0.5rem', marginTop: '0.5rem' }}>
+                Authorized Signatory login credentials:
+              </p>
+              <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, padding: '0.75rem', marginBottom: '1.5rem', fontSize: '0.8rem', color: '#92400e', textAlign: 'left' }}>
+                <div>📧 {signatory.email}</div>
+                <div style={{ marginTop: '0.35rem' }}>🔑 Temp password: <strong>{signatoryTempPassword}</strong></div>
+                <div style={{ marginTop: '0.5rem', fontSize: '0.7rem' }}>Share these credentials with your Authorized Signatory. They can change the password after first login.</div>
+              </div>
+            </>
+          )}
           <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '2rem' }}>
-            We'll email you when your corporate DID is ready. Portal Manager reviews → DID Issuer issues your DID + credentials.
+            We'll email you when your corporate DID is ready. Authorized Signatory reviews → DID Issuer Maker verifies → DID Issuer Checker issues your DID + credentials.
           </p>
           <button style={{ background: '#2563eb', color: 'white', border: 'none', padding: '0.75rem 2rem', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}
             onClick={() => navigate('/login')}>
@@ -152,12 +200,12 @@ export default function OrganizationApplyPage() {
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <h1 style={{ color: '#0f172a', fontWeight: 800, fontSize: '1.5rem', marginBottom: '0.25rem' }}>Corporate Registration</h1>
-          <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Step {step} of 4</p>
+          <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Step {step} of 5</p>
         </div>
 
         {/* Progress bar */}
         <div style={{ display: 'flex', gap: 6, marginBottom: '2rem' }}>
-          {[1, 2, 3, 4].map(s => (
+          {[1, 2, 3, 4, 5].map(s => (
             <div key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: s <= step ? '#2563eb' : '#e2e8f0', transition: 'background 0.3s' }} />
           ))}
         </div>
@@ -256,15 +304,82 @@ export default function OrganizationApplyPage() {
                 </div>
               </div>
 
+              {/* Authorized Signatory */}
+              <div style={{ background: '#fff7ed', borderRadius: 8, padding: '1rem', marginBottom: '1.5rem', border: '1px solid #fed7aa' }}>
+                <div style={{ fontWeight: 700, color: '#d97706', marginBottom: '0.75rem', fontSize: '0.9rem' }}>✍️ Authorized Signatory</div>
+                <p style={{ fontSize: '0.75rem', color: '#92400e', marginBottom: '0.75rem', lineHeight: 1.5 }}>
+                  This person will receive a login to review and approve this application before it is sent to the DID Issuer.
+                </p>
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label style={labelStyle}>Full Name *</label>
+                  <input style={{ ...inputStyle, borderColor: '#fed7aa' }}
+                    value={signatory.name}
+                    onChange={e => setSignatory(s => ({ ...s, name: e.target.value }))}
+                    placeholder="Authorized Signatory name" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Email *</label>
+                  <input style={{ ...inputStyle, borderColor: '#fed7aa' }} type="email"
+                    value={signatory.email}
+                    onChange={e => setSignatory(s => ({ ...s, email: e.target.value }))}
+                    placeholder="signatory@company.com" />
+                </div>
+              </div>
+
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <button style={backBtnStyle} onClick={() => setStep(1)}>← Back</button>
-                <button style={{ ...nextBtnStyle, flex: 2 }} onClick={() => { if (validateStep2()) setStep(3); }}>Next →</button>
+                <button style={{ ...nextBtnStyle, flex: 2 }} onClick={() => { if (validateStep2()) { loadIssuers(); setStep(3); } }}>Next →</button>
               </div>
             </>
           )}
 
-          {/* ── Step 3: Supporting Documents ── */}
+          {/* ── Step 3: Select DID Issuer ── */}
           {step === 3 && (
+            <>
+              <h2 style={{ fontWeight: 700, color: '#0f172a', marginBottom: '0.5rem', fontSize: '1.1rem' }}>Select DID Issuer</h2>
+              <p style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
+                Which DID Issuer will issue your corporate DID and Verifiable Credentials?
+              </p>
+
+              {issuersLoading ? (
+                <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>Loading issuers…</div>
+              ) : issuers.length === 0 ? (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '1rem', color: '#dc2626', fontSize: '0.875rem' }}>
+                  No DID Issuers available. Please contact support.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                  {issuers.map(iss => (
+                    <label key={iss.id} style={{
+                      display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem',
+                      borderRadius: 8, cursor: 'pointer',
+                      border: `2px solid ${selectedIssuerId === iss.id ? '#2563eb' : '#e2e8f0'}`,
+                      background: selectedIssuerId === iss.id ? '#eff6ff' : 'white',
+                    }}>
+                      <input type="radio" name="issuer" value={iss.id}
+                        checked={selectedIssuerId === iss.id}
+                        onChange={() => setSelectedIssuerId(iss.id)}
+                        style={{ accentColor: '#2563eb' }} />
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.9rem' }}>{iss.name}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{iss.email}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button style={backBtnStyle} onClick={() => setStep(2)}>← Back</button>
+                <button style={{ ...nextBtnStyle, flex: 2 }} onClick={() => { if (validateStep3()) setStep(4); }}>
+                  Next →
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ── Step 4: Supporting Documents ── */}
+          {step === 4 && (
             <>
               <h2 style={{ fontWeight: 700, color: '#0f172a', marginBottom: '0.5rem', fontSize: '1.1rem' }}>Supporting Documents</h2>
               <p style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '1.5rem' }}>Each uploaded document generates one Verifiable Credential on approval.</p>
@@ -319,14 +434,14 @@ export default function OrganizationApplyPage() {
               ))}
 
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
-                <button style={backBtnStyle} onClick={() => setStep(2)}>← Back</button>
-                <button style={{ ...nextBtnStyle, flex: 2 }} onClick={() => { if (validateStep3()) setStep(4); }}>Next →</button>
+                <button style={backBtnStyle} onClick={() => setStep(3)}>← Back</button>
+                <button style={{ ...nextBtnStyle, flex: 2 }} onClick={() => { if (validateStep4()) setStep(5); }}>Next →</button>
               </div>
             </>
           )}
 
-          {/* ── Step 4: Review & Submit ── */}
-          {step === 4 && (
+          {/* ── Step 5: Review & Submit ── */}
+          {step === 5 && (
             <>
               <h2 style={{ fontWeight: 700, color: '#0f172a', marginBottom: '1.5rem', fontSize: '1.1rem' }}>Review & Submit</h2>
 
@@ -342,6 +457,8 @@ export default function OrganizationApplyPage() {
                 <div style={{ fontWeight: 700, color: '#2563eb', marginBottom: '0.5rem', fontSize: '0.85rem' }}>Key People</div>
                 <div style={{ fontSize: '0.8rem', color: '#374151' }}>Admin: {people.super_admin_name} ({people.super_admin_email})</div>
                 <div style={{ fontSize: '0.8rem', color: '#374151', marginTop: '0.25rem' }}>Requester: {people.requester_name} ({people.requester_email})</div>
+                <div style={{ fontSize: '0.8rem', color: '#374151', marginTop: '0.25rem' }}>Signatory: {signatory.name} ({signatory.email})</div>
+                <div style={{ fontSize: '0.8rem', color: '#374151', marginTop: '0.25rem' }}>DID Issuer: {issuers.find(i => i.id === selectedIssuerId)?.name || selectedIssuerId}</div>
               </div>
 
               {/* Documents */}
@@ -357,11 +474,11 @@ export default function OrganizationApplyPage() {
 
               {/* Info box */}
               <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1.5rem', fontSize: '0.8rem', color: '#92400e' }}>
-                ⏱ After submission: Portal Manager reviews → DID Issuer issues your corporate DID + credentials → login details sent by email
+                ⏱ After submission: Authorized Signatory reviews → DID Issuer Maker verifies → DID Issuer Checker issues your corporate DID + credentials
               </div>
 
               <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <button style={backBtnStyle} onClick={() => setStep(3)}>← Back</button>
+                <button style={backBtnStyle} onClick={() => setStep(4)}>← Back</button>
                 <button
                   style={{ ...nextBtnStyle, flex: 2, background: loading ? '#94a3b8' : '#16a34a' }}
                   disabled={loading}
