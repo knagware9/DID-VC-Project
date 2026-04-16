@@ -253,7 +253,7 @@ export default function VerifierDashboard() {
               <div className="card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                   <h4 style={{ margin: 0 }}>Select Employee — {selectedCorp.name}</h4>
-                  <button onClick={() => { setReqStep(1); setSelectedEmployee(null); }}
+                  <button onClick={() => { setReqStep(1); setSelectedCorp(null); setCorpEmployees([]); setSelectedEmployee(null); }}
                     style={{ fontSize: '0.75rem', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}>
                     ← Back
                   </button>
