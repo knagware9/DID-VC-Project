@@ -3847,24 +3847,19 @@ app.get('/api/holder/corporate-wallet', requireAuth, requireRole('corporate'), a
     const allowedTypes = permResult.rows.map((r: any) => r.credential_type);
     if (allowedTypes.length === 0) return res.json({ success: true, credentials: [] });
 
-    const corpDidResult = await query(
-      "SELECT id FROM dids WHERE user_id = $1 AND did_type = 'parent' ORDER BY created_at DESC LIMIT 1",
-      [orgOwnerId]
-    );
-    if (corpDidResult.rows.length === 0) return res.json({ success: true, credentials: [] });
-
-    const corpDidId = corpDidResult.rows[0].id;
     const placeholders = allowedTypes.map((_: any, i: number) => `$${i + 2}`).join(', ');
     const result = await query(
       `SELECT c.id, c.credential_type, c.issued_at, c.expires_at, c.revoked, c.vc_json,
               d.did_string AS issuer_did_string
        FROM credentials c
        LEFT JOIN dids d ON c.issuer_did_id = d.id
-       WHERE c.holder_did_id = $1
+       JOIN dids holder_did ON c.holder_did_id = holder_did.id
+       WHERE holder_did.user_id = $1
+         AND holder_did.did_type = 'parent'
          AND c.credential_type IN (${placeholders})
          AND c.revoked = false
        ORDER BY c.issued_at DESC`,
-      [corpDidId, ...allowedTypes]
+      [orgOwnerId, ...allowedTypes]
     );
     res.json({ success: true, credentials: result.rows });
   } catch (error: any) {
