@@ -50,8 +50,9 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { tab: 'vc-requests',    label: 'VC Requests',      icon: '📄' },
     { tab: 'did-requests',   label: 'DID Requests',     icon: '🔑' },
     { tab: 'checker-queue',  label: 'Checker Queue',    icon: '✅', subRoles: ['checker', 'super_admin'] },
-    { tab: 'issued',         label: 'Issued',           icon: '📋' },
-    { tab: 'team',           label: 'Team',             icon: '👥', subRoles: ['super_admin'] },
+    { tab: 'issued',            label: 'Issued',             icon: '📋' },
+    { tab: 'corp-applications', label: 'Corp Applications',  icon: '🏢', subRoles: ['did_issuer_admin'] },
+    { tab: 'team',              label: 'Team',               icon: '👥', subRoles: ['super_admin'] },
   ],
   verifier: [
     { tab: 'requests',  label: 'Verification Requests', icon: '📋' },
