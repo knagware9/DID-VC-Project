@@ -312,3 +312,148 @@ CREATE INDEX IF NOT EXISTS idx_mc_actions_maker ON mc_actions(maker_id);
 CREATE INDEX IF NOT EXISTS idx_mc_actions_status ON mc_actions(status);
 CREATE INDEX IF NOT EXISTS idx_vp_requests_org ON vp_requests(holder_org_id);
 CREATE INDEX IF NOT EXISTS idx_vp_requests_verifier ON vp_requests(verifier_id);
+
+-- Portal Manager: update mc_actions resource_type constraint (full set, idempotent)
+DO $$
+BEGIN
+  ALTER TABLE mc_actions DROP CONSTRAINT IF EXISTS mc_actions_resource_type_check;
+EXCEPTION WHEN undefined_object THEN NULL;
+END $$;
+
+-- Platform entities registry (DID issuers, VC issuers, Trust endorsers)
+CREATE TABLE IF NOT EXISTS platform_entities (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name             VARCHAR(255) NOT NULL,
+  email            VARCHAR(255) UNIQUE NOT NULL,
+  entity_type      VARCHAR(30)  NOT NULL
+                   CHECK (entity_type IN ('did_issuer', 'vc_issuer', 'trust_endorser')),
+  status           VARCHAR(20)  NOT NULL DEFAULT 'pending'
+                   CHECK (status IN ('pending', 'active', 'inactive', 'rejected')),
+  user_id          UUID REFERENCES users(id),
+  did              VARCHAR(255),
+  onboarded_by     UUID REFERENCES users(id),
+  activated_by     UUID REFERENCES users(id),
+  notes            TEXT,
+  rejection_reason TEXT,
+  created_at       TIMESTAMPTZ DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_platform_entities_type   ON platform_entities(entity_type);
+CREATE INDEX IF NOT EXISTS idx_platform_entities_status ON platform_entities(status);
+
+-- Seed existing portal_manager accounts as super_admin
+UPDATE users SET sub_role = 'super_admin'
+WHERE role = 'portal_manager' AND sub_role IS NULL;
+
+-- Maker-Checker for Issuers and Verifiers: expand mc_actions resource_type
+DO $$
+BEGIN
+  ALTER TABLE mc_actions DROP CONSTRAINT IF EXISTS mc_actions_resource_type_check;
+EXCEPTION WHEN undefined_object THEN NULL;
+END $$;
+ALTER TABLE mc_actions ADD CONSTRAINT mc_actions_resource_type_check
+  CHECK (resource_type IN ('vc_issuance', 'vp_share', 'entity_onboarding', 'vc_request_approval', 'did_request_issuance'));
+
+-- Government agency admins → super_admin with org_id=self
+UPDATE users SET sub_role = 'super_admin', org_id = id
+WHERE role = 'government_agency' AND sub_role IN ('did_issuer_admin', 'vc_issuer_admin');
+
+-- Verifier admins → super_admin with org_id=self
+UPDATE users SET sub_role = 'super_admin', org_id = id
+WHERE role = 'verifier' AND sub_role IS NULL;
+
+-- Polygon blockchain anchoring columns
+ALTER TABLE dids ADD COLUMN IF NOT EXISTS polygon_tx_hash VARCHAR(66);
+ALTER TABLE dids ADD COLUMN IF NOT EXISTS polygon_block_number INTEGER;
+
+ALTER TABLE credentials ADD COLUMN IF NOT EXISTS polygon_tx_hash VARCHAR(66);
+ALTER TABLE credentials ADD COLUMN IF NOT EXISTS polygon_vc_hash VARCHAR(64);
+ALTER TABLE credentials ADD COLUMN IF NOT EXISTS polygon_block_number INTEGER;
+ALTER TABLE credentials ADD COLUMN IF NOT EXISTS polygon_anchored_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_credentials_polygon_tx ON credentials(polygon_tx_hash) WHERE polygon_tx_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_dids_polygon_tx        ON dids(polygon_tx_hash)        WHERE polygon_tx_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_credentials_vc_id      ON credentials((vc_json->>'id'));
+
+-- Fix any government_agency users still using legacy sub_roles (re-run safe)
+UPDATE users SET sub_role = 'super_admin', org_id = id
+WHERE role = 'government_agency' AND sub_role IN ('did_issuer_admin', 'vc_issuer_admin')
+  AND (org_id IS NULL OR org_id = id);
+
+-- Fix government_agency super_admin users with no org_id (entity_onboarding race)
+UPDATE users SET org_id = id
+WHERE role = 'government_agency' AND sub_role = 'super_admin' AND org_id IS NULL;
+
+-- Phase: requester & authorized_signatory roles
+DO $$
+BEGIN
+  ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_sub_role;
+  ALTER TABLE users ADD CONSTRAINT chk_users_sub_role
+    CHECK (sub_role IN (
+      'did_issuer_admin', 'vc_issuer_admin', 'maker', 'checker',
+      'super_admin', 'admin', 'operator', 'member',
+      'requester', 'authorized_signatory', 'employee'
+    ));
+END $$;
+
+-- Employee portal: link employee_registry to a user account
+ALTER TABLE employee_registry ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_employee_registry_user_id ON employee_registry(user_id);
+
+DO $$
+BEGIN
+  ALTER TABLE vc_requests DROP CONSTRAINT IF EXISTS vc_requests_status_check;
+  ALTER TABLE vc_requests ADD CONSTRAINT vc_requests_status_check
+    CHECK (status IN ('draft', 'pending', 'approved', 'rejected'));
+END $$;
+
+ALTER TABLE vc_requests ADD COLUMN IF NOT EXISTS corp_status VARCHAR(30);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_vc_requests_corp_status'
+  ) THEN
+    ALTER TABLE vc_requests ADD CONSTRAINT chk_vc_requests_corp_status
+      CHECK (corp_status IN ('submitted','maker_reviewed','checker_approved','signatory_approved'));
+  END IF;
+END $$;
+ALTER TABLE vc_requests ADD COLUMN IF NOT EXISTS corp_reviewer_id  UUID REFERENCES users(id);
+ALTER TABLE vc_requests ADD COLUMN IF NOT EXISTS corp_checker_id   UUID REFERENCES users(id);
+ALTER TABLE vc_requests ADD COLUMN IF NOT EXISTS corp_signatory_id UUID REFERENCES users(id);
+CREATE INDEX IF NOT EXISTS idx_vc_requests_corp_status ON vc_requests(corp_status);
+
+CREATE TABLE IF NOT EXISTS did_requests (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  requester_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  org_id            UUID REFERENCES users(id),
+  request_data      JSONB NOT NULL DEFAULT '{}',
+  purpose           TEXT,
+  corp_status       VARCHAR(30) NOT NULL DEFAULT 'submitted'
+                    CONSTRAINT chk_did_requests_corp_status
+                    CHECK (corp_status IN (
+                      'submitted','maker_reviewed','checker_approved',
+                      'signatory_approved','completed','rejected'
+                    )),
+  corp_reviewer_id  UUID REFERENCES users(id),
+  corp_checker_id   UUID REFERENCES users(id),
+  corp_signatory_id UUID REFERENCES users(id),
+  created_did_id    UUID REFERENCES dids(id),
+  rejection_reason  TEXT,
+  created_at        TIMESTAMPTZ DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_did_requests_org         ON did_requests(org_id);
+CREATE INDEX IF NOT EXISTS idx_did_requests_requester   ON did_requests(requester_user_id);
+CREATE INDEX IF NOT EXISTS idx_did_requests_corp_status ON did_requests(corp_status);
+
+-- Employee credential sharing permissions (admin-granted)
+CREATE TABLE IF NOT EXISTS employee_credential_permissions (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  employee_registry_id UUID NOT NULL REFERENCES employee_registry(id) ON DELETE CASCADE,
+  credential_type      VARCHAR(100) NOT NULL,
+  granted_by           UUID NOT NULL REFERENCES users(id),
+  created_at           TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (employee_registry_id, credential_type)
+);
+CREATE INDEX IF NOT EXISTS idx_emp_cred_perms_registry
+  ON employee_credential_permissions(employee_registry_id);
