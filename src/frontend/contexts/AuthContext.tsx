@@ -18,8 +18,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (email: string, password: string) => Promise<{ mfaRequired: boolean; tempToken?: string; mfaCode?: string }>;
-  verifyMFA: (tempToken: string, code: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, role: UserRole, name?: string, authority_type?: string) => Promise<void>;
   logout: () => void;
   loading: boolean;
@@ -53,26 +52,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Login failed');
-    if (!data.mfaRequired && data.token) {
-      setToken(data.token);
-      setUser(data.user);
-      localStorage.setItem('auth_token', data.token);
-      redirectByRole(data.user.role);
-    }
-    return { mfaRequired: data.mfaRequired, tempToken: data.tempToken, mfaCode: data.mfaCode };
-  };
-
-  const verifyMFA = async (tempToken: string, code: string) => {
-    const res = await fetch(`${API_BASE}/auth/verify-mfa`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tempToken, code }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'MFA verification failed');
     setToken(data.token);
     setUser(data.user);
     localStorage.setItem('auth_token', data.token);
-    redirectByRole(data.user.role);
+    redirectByRole(data.user.role, data.user.sub_role);
   };
 
   const register = async (email: string, password: string, role: UserRole, name?: string, authority_type?: string) => {
@@ -95,9 +78,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.location.href = '/';
   };
 
-  function redirectByRole(role: UserRole) {
+  function redirectByRole(role: UserRole, subRole?: string | null) {
     setTimeout(() => {
       if (role === 'portal_manager') window.location.href = '/portal/dashboard';
+      else if (role === 'corporate' && subRole === 'authorized_signatory') window.location.href = '/corporate/signatory';
       else if (role === 'corporate') window.location.href = '/corporate/dashboard';
       else if (role === 'government_agency') window.location.href = '/authority/dashboard';
       else window.location.href = '/verifier/dashboard';
@@ -105,7 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, login, verifyMFA, register, logout, loading }}>
+    <AuthContext.Provider value={{ user, token, login, register, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

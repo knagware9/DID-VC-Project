@@ -12,6 +12,8 @@ import ShareViewPage from './pages/ShareViewPage';
 import OrganizationApplyPage from './pages/OrganizationApplyPage';
 import AuthorityDashboard from './pages/AuthorityDashboard';
 import PortalManagerDashboard from './pages/PortalManagerDashboard';
+import BesuExplorerPage from './pages/BesuExplorerPage';
+import SignatoryDashboard from './pages/SignatoryDashboard';
 import AppShell from './components/AppShell';
 import './App.css';
 
@@ -63,6 +65,11 @@ function AppRoutes() {
           <AppShell pageTitle="Compose VP"><VPComposerPage /></AppShell>
         </ProtectedRouteWrapper>
       } />
+      <Route path="/corporate/signatory" element={
+        <ProtectedRouteWrapper role="corporate">
+          <SignatoryDashboard />
+        </ProtectedRouteWrapper>
+      } />
       <Route path="/issuer/dashboard" element={
         <ProtectedRouteWrapper role="government_agency">
           <AppShell><GovtIssuerDashboard /></AppShell>
@@ -83,6 +90,8 @@ function AppRoutes() {
           <AppShell><PortalManagerDashboard /></AppShell>
         </ProtectedRouteWrapper>
       } />
+      {/* Besu Explorer — standalone page, no AppShell sidebar */}
+      <Route path="/besu/explorer" element={<BesuExplorerPage />} />
       <Route path="/authority-login" element={<Navigate to="/login" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -51,7 +51,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { tab: 'did-requests',   label: 'DID Requests',     icon: '🔑' },
     { tab: 'checker-queue',  label: 'Checker Queue',    icon: '✅', subRoles: ['checker', 'super_admin'] },
     { tab: 'issued',            label: 'Issued',             icon: '📋' },
-    { tab: 'corp-applications', label: 'Corp Applications',  icon: '🏢', subRoles: ['did_issuer_admin'] },
+    { tab: 'corp-applications', label: 'Corp Applications',  icon: '🏢', subRoles: ['maker', 'checker', 'super_admin'] },
     { tab: 'team',              label: 'Team',               icon: '👥', subRoles: ['super_admin'] },
   ],
   verifier: [
@@ -63,7 +63,6 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
   portal_manager: [
     { tab: 'overview',       label: 'Overview',                   icon: '🏠' },
     { tab: 'entities',       label: 'Issuer & Trusted Endorser',  icon: '🌐' },
-    { tab: 'applications',   label: 'Corp Applications',          icon: '📋' },
     { tab: 'entity-onboard', label: 'Onboard Entity',             icon: '➕', subRoles: ['super_admin', 'maker'] },
     { tab: 'admin-team',     label: 'Admin Team',                 icon: '👥', subRoles: ['super_admin'] },
     { tab: 'dids',           label: 'DID Registry',               icon: '🔑', subRoles: ['super_admin'] },

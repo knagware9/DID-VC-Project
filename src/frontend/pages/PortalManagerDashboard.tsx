@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppShell } from '../components/AppShell';
 
-type Tab = 'overview' | 'authorities' | 'dids' | 'organizations' | 'entities' | 'entity-onboard' | 'admin-queue' | 'admin-team' | 'applications';
+type Tab = 'overview' | 'authorities' | 'dids' | 'organizations' | 'entities' | 'entity-onboard' | 'admin-queue' | 'admin-team';
 
 type Authority = {
   id: string; email: string; name: string;
@@ -80,13 +80,6 @@ export default function PortalManagerDashboard() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  // Corp Applications tab state
-  const [corpApps, setCorpApps] = useState<any[]>([]);
-  const [availableIssuers, setAvailableIssuers] = useState<any[]>([]);
-  const [selectedIssuer, setSelectedIssuer] = useState<Record<string, string>>({});
-  const [expandedApp, setExpandedApp] = useState<string | null>(null);
-  const [appMsg, setAppMsg] = useState('');
-
   const [createdCred, setCreatedCred] = useState<{ email: string; tempPassword: string; did?: string; label?: string } | null>(null);
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -128,15 +121,6 @@ export default function PortalManagerDashboard() {
         const r = await fetch('/api/portal/admin/team', { headers: authHeader() });
         const d = await r.json();
         setTeamMembers(d.team || []);
-      } else if (tab === 'applications') {
-        const [appsRes, issuersRes] = await Promise.all([
-          fetch('/api/portal/corporate-applications', { headers: authHeader() }),
-          fetch('/api/public/did-issuers'),
-        ]);
-        const appsData = await appsRes.json();
-        const issuersData = await issuersRes.json();
-        setCorpApps(appsData.applications || []);
-        setAvailableIssuers(issuersData.issuers || []);
       }
     } catch (e: any) { setMsg(e.message); }
     finally { setLoading(false); }
@@ -184,40 +168,6 @@ export default function PortalManagerDashboard() {
       setOnboardForm({ name: '', email: '', entity_type: 'did_issuer', notes: '' });
       setTab('entities');
     } catch (e: any) { setMsg(e.message); }
-    finally { setLoading(false); }
-  }
-
-  async function handleActivate(appId: string) {
-    const issuerId = selectedIssuer[appId];
-    if (!issuerId) { setAppMsg('Please select a DID Issuer first'); return; }
-    setLoading(true);
-    try {
-      const r = await fetch(`/api/portal/corporate-applications/${appId}/activate`, {
-        method: 'POST', headers: authHeader(),
-        body: JSON.stringify({ assigned_issuer_id: issuerId }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error);
-      setAppMsg('Application activated and assigned to issuer.');
-      loadTab();
-    } catch (e: any) { setAppMsg(e.message); }
-    finally { setLoading(false); }
-  }
-
-  async function handleRejectApp(appId: string) {
-    const reason = window.prompt('Rejection reason (optional):');
-    if (reason === null) return; // cancelled
-    setLoading(true);
-    try {
-      const r = await fetch(`/api/portal/corporate-applications/${appId}/reject`, {
-        method: 'POST', headers: authHeader(),
-        body: JSON.stringify({ rejection_reason: reason }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error);
-      setAppMsg('Application rejected.');
-      loadTab();
-    } catch (e: any) { setAppMsg(e.message); }
     finally { setLoading(false); }
   }
 
@@ -734,132 +684,6 @@ export default function PortalManagerDashboard() {
         </>
       )}
 
-      {/* ── Corp Applications ── */}
-      {tab === 'applications' && (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-            <h2 style={{ margin: 0 }}>Corporate Applications</h2>
-            {appMsg && <span style={{ color: appMsg.includes('error') || appMsg.includes('select') ? '#dc3545' : '#16a34a', fontSize: '0.875rem' }}>{appMsg}</span>}
-          </div>
-
-          {corpApps.length === 0 && (
-            <div className="card" style={{ textAlign: 'center', padding: '2rem', color: '#888' }}>No corporate applications yet.</div>
-          )}
-
-          {corpApps.map(app => {
-            const statusColor: Record<string, string> = {
-              pending: '#fef3c7', activated: '#dbeafe', issued: '#dcfce7', rejected: '#fee2e2',
-            };
-            const statusText: Record<string, string> = {
-              pending: '#92400e', activated: '#1e40af', issued: '#166534', rejected: '#991b1b',
-            };
-            return (
-              <div key={app.id} className="card" style={{ marginBottom: '1rem', padding: '1.25rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                  <div>
-                    <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '1rem' }}>{app.company_name}</div>
-                    <div style={{ fontSize: '0.78rem', color: '#64748b' }}>CIN: {app.cin}</div>
-                    <div style={{ fontSize: '0.78rem', color: '#374151', marginTop: '0.25rem' }}>
-                      Admin: {app.super_admin_name} ({app.super_admin_email}) · Requester: {app.requester_name} ({app.requester_email})
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                      Submitted: {new Date(app.created_at).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <span style={{
-                    background: statusColor[app.application_status] || '#f1f5f9',
-                    color: statusText[app.application_status] || '#374151',
-                    fontSize: '0.7rem', fontWeight: 700, padding: '3px 10px', borderRadius: 8,
-                  }}>
-                    {app.application_status.toUpperCase()}
-                  </span>
-                </div>
-
-                {/* Expand/collapse documents */}
-                <button
-                  style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '0.8rem', cursor: 'pointer', padding: '0.25rem 0', fontWeight: 600 }}
-                  onClick={() => setExpandedApp(expandedApp === app.id ? null : app.id)}
-                >
-                  {expandedApp === app.id ? '▲ Hide Documents' : '▼ Show Documents'}
-                </button>
-
-                {expandedApp === app.id && (
-                  <div style={{ marginTop: '0.75rem', background: '#f8fafc', borderRadius: 6, padding: '0.75rem' }}>
-                    {(app.documents || []).length === 0 ? (
-                      <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>No documents</span>
-                    ) : (
-                      (app.documents as any[]).map((doc: any, i: number) => (
-                        <div key={i} style={{ fontSize: '0.8rem', color: '#374151', marginBottom: '0.35rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          <span>📄 {doc.vc_type}</span>
-                          {doc.reference_number && <span style={{ color: '#64748b' }}>ref: {doc.reference_number}</span>}
-                          {doc.file_path && (
-                            <a href={`/${doc.file_path}`} target="_blank" rel="noopener noreferrer"
-                              style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>
-                              Download ↗
-                            </a>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-
-                {/* Actions for pending applications */}
-                {app.application_status === 'pending' && (
-                  <div style={{ marginTop: '1rem', borderTop: '1px solid #f1f5f9', paddingTop: '1rem' }}>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>Assign to DID Issuer</div>
-                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                      <select
-                        style={{ flex: 1, padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: '0.85rem', color: '#1e293b' }}
-                        value={selectedIssuer[app.id] || ''}
-                        onChange={e => setSelectedIssuer(prev => ({ ...prev, [app.id]: e.target.value }))}
-                      >
-                        <option value="">Select DID Issuer…</option>
-                        {availableIssuers.map((iss: any) => (
-                          <option key={iss.id} value={iss.id}>{iss.name}</option>
-                        ))}
-                      </select>
-                      <button
-                        style={{ padding: '0.5rem 1rem', background: '#2563eb', color: 'white', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
-                        onClick={() => handleActivate(app.id)} disabled={loading}
-                      >
-                        ✓ Activate & Assign
-                      </button>
-                      <button
-                        style={{ padding: '0.5rem 1rem', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 6, fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
-                        onClick={() => handleRejectApp(app.id)} disabled={loading}
-                      >
-                        ✗ Reject
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Activated: show assigned issuer */}
-                {app.application_status === 'activated' && (
-                  <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: '#1e40af', background: '#dbeafe', padding: '0.5rem 0.75rem', borderRadius: 6 }}>
-                    Assigned to: {app.assigned_issuer_name || 'DID Issuer'} — awaiting issuance
-                  </div>
-                )}
-
-                {/* Issued */}
-                {app.application_status === 'issued' && (
-                  <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: '#166534', background: '#dcfce7', padding: '0.5rem 0.75rem', borderRadius: 6 }}>
-                    🎉 Issued by {app.assigned_issuer_name || 'DID Issuer'} — corporate accounts created
-                  </div>
-                )}
-
-                {/* Rejected */}
-                {app.application_status === 'rejected' && (
-                  <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: '#991b1b', background: '#fee2e2', padding: '0.5rem 0.75rem', borderRadius: 6 }}>
-                    Rejected{app.rejection_reason ? `: ${app.rejection_reason}` : ''}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </>
-      )}
     </div>
   );
 }
