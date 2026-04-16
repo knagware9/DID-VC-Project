@@ -6,12 +6,14 @@ export default function SignatoryDashboard() {
   const [applications, setApplications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
+  const [msgType, setMsgType] = useState<'success' | 'error' | ''>('');
+  const [actionLoading, setActionLoading] = useState(false);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
   const authHeader = () => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' });
 
-  useEffect(() => { loadApplications(); }, []);
+  useEffect(() => { loadApplications(); }, [token]);
 
   async function loadApplications() {
     setLoading(true);
@@ -22,13 +24,15 @@ export default function SignatoryDashboard() {
       if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
       setApplications(data.applications || []);
     } catch (e: any) {
-      setMsg(e.message);
+      setMsg(e.message); setMsgType('error');
     } finally {
       setLoading(false);
     }
   }
 
   async function handleApprove(appId: string) {
+    if (actionLoading) return;
+    setActionLoading(true);
     setMsg('');
     try {
       const res = await fetch(`/api/corporate/signatory/applications/${appId}/approve`, {
@@ -37,12 +41,16 @@ export default function SignatoryDashboard() {
       let data: any = {};
       try { data = await res.json(); } catch { /* non-JSON */ }
       if (!res.ok) throw new Error(data.error || 'Approval failed');
-      setMsg('✅ Application approved and submitted to DID Issuer.');
+      setMsg('Application approved and submitted to DID Issuer.');
+      setMsgType('success');
       loadApplications();
-    } catch (e: any) { setMsg(e.message); }
+    } catch (e: any) { setMsg(e.message); setMsgType('error'); }
+    finally { setActionLoading(false); }
   }
 
   async function handleReject(appId: string) {
+    if (actionLoading) return;
+    setActionLoading(true);
     setMsg('');
     try {
       const res = await fetch(`/api/corporate/signatory/applications/${appId}/reject`, {
@@ -53,10 +61,12 @@ export default function SignatoryDashboard() {
       try { data = await res.json(); } catch { /* non-JSON */ }
       if (!res.ok) throw new Error(data.error || 'Rejection failed');
       setMsg('Application rejected.');
+      setMsgType('success');
       setRejectingId(null);
       setRejectReason('');
       loadApplications();
-    } catch (e: any) { setMsg(e.message); }
+    } catch (e: any) { setMsg(e.message); setMsgType('error'); }
+    finally { setActionLoading(false); }
   }
 
   return (
@@ -74,9 +84,9 @@ export default function SignatoryDashboard() {
         {msg && (
           <div style={{
             padding: '0.75rem 1rem', borderRadius: 8, marginBottom: '1rem', fontSize: '0.875rem',
-            background: msg.startsWith('✅') ? '#f0fdf4' : '#fef2f2',
-            color: msg.startsWith('✅') ? '#166534' : '#dc2626',
-            border: `1px solid ${msg.startsWith('✅') ? '#bbf7d0' : '#fecaca'}`,
+            background: msgType === 'success' ? '#f0fdf4' : '#fef2f2',
+            color: msgType === 'success' ? '#166534' : '#dc2626',
+            border: `1px solid ${msgType === 'success' ? '#bbf7d0' : '#fecaca'}`,
           }}>
             {msg}
           </div>
@@ -156,7 +166,8 @@ export default function SignatoryDashboard() {
                   />
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
                     <button
-                      style={{ flex: 1, padding: '0.6rem', background: '#dc2626', color: 'white', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem' }}
+                      disabled={actionLoading}
+                      style={{ flex: 1, padding: '0.6rem', background: actionLoading ? '#94a3b8' : '#dc2626', color: 'white', border: 'none', borderRadius: 6, fontWeight: 700, cursor: actionLoading ? 'default' : 'pointer', fontSize: '0.875rem' }}
                       onClick={() => handleReject(app.id)}
                     >
                       Confirm Reject
@@ -181,7 +192,8 @@ export default function SignatoryDashboard() {
                     ✗ Reject
                   </button>
                   <button
-                    style={{ flex: 2, padding: '0.75rem', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}
+                    disabled={actionLoading}
+                    style={{ flex: 2, padding: '0.75rem', background: actionLoading ? '#94a3b8' : '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: actionLoading ? 'default' : 'pointer', fontSize: '0.9rem' }}
                     onClick={() => handleApprove(app.id)}
                   >
                     ✓ Approve & Submit to DID Issuer
