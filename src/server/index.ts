@@ -2723,13 +2723,11 @@ app.post('/api/did-issuer/corporate-applications/:id/issue', requireAuth, requir
       const corporateDid = await createAndStoreDID(superAdminId, 'parent', undefined, slug);
 
       // 4. Create requester user
-      const requesterResult = await query(
+      await query(
         `INSERT INTO users (email, password_hash, role, name, sub_role, org_id)
-         VALUES ($1, $2, 'corporate', $3, 'requester', $4)
-         RETURNING id`,
+         VALUES ($1, $2, 'corporate', $3, 'requester', $4)`,
         [app.requester_email, requesterHash, app.requester_name, superAdminId]
       );
-      const requesterId = requesterResult.rows[0].id;
 
       // 5. Issue selected VCs
       const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
