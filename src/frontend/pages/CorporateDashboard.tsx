@@ -709,7 +709,7 @@ return (
                                   </label>
                                 ))}
                               </div>
-                              {permMsg?.id === emp.id && (
+                              {permMsg?.id === emp.id && permMsg && (
                                 <div style={{ fontSize: '0.75rem', color: permMsg.type === 'success' ? '#276749' : '#dc3545', marginBottom: '0.5rem' }}>
                                   {permMsg.text}
                                 </div>
