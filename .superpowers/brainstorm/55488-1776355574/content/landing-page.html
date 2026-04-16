@@ -1,0 +1,163 @@
+<h2>Home Page — Full Landing Page Layout</h2>
+<p class="subtitle">Three structural approaches for the redesigned home page</p>
+
+<div class="cards">
+
+  <!-- Option A -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#0f172a;padding:12px 16px;border-radius:6px 6px 0 0;display:flex;justify-content:space-between;align-items:center">
+        <span style="color:white;font-weight:700;font-size:0.75rem">🔐 DID·VC Platform</span>
+        <div style="display:flex;gap:8px">
+          <span style="color:#94a3b8;font-size:0.65rem">Login</span>
+          <span style="background:#2563eb;color:white;font-size:0.65rem;padding:2px 8px;border-radius:4px">Register →</span>
+        </div>
+      </div>
+      <!-- Hero -->
+      <div style="background:linear-gradient(135deg,#1e3a5f,#0f172a);padding:20px 16px;text-align:center">
+        <div style="font-size:0.7rem;color:#60a5fa;font-weight:700;letter-spacing:2px;margin-bottom:6px">INDIA'S DECENTRALISED IDENTITY NETWORK</div>
+        <div style="font-size:1rem;color:white;font-weight:800;margin-bottom:4px">Verifiable Credentials for<br/>Indian Enterprises</div>
+        <div style="font-size:0.65rem;color:#94a3b8;margin-bottom:12px">Issue • Verify • Share</div>
+        <button style="background:#2563eb;color:white;border:none;padding:6px 16px;border-radius:6px;font-size:0.72rem;font-weight:600">Register Your Corporate →</button>
+      </div>
+      <!-- DID Issuers strip -->
+      <div style="background:#f8fafc;padding:10px 16px;border-top:1px solid #e2e8f0">
+        <div style="font-size:0.6rem;color:#94a3b8;text-align:center;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px">Trusted DID Issuers</div>
+        <div style="display:flex;justify-content:center;gap:12px">
+          <div style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:4px 10px;font-size:0.65rem;font-weight:700;color:#1e293b">IBDIC</div>
+          <div style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:4px 10px;font-size:0.65rem;font-weight:700;color:#1e293b">DGFT</div>
+          <div style="background:white;border:1px solid #e2e8f0;border-radius:6px;padding:4px 10px;font-size:0.65rem;font-weight:700;color:#1e293b">NeSL</div>
+        </div>
+      </div>
+      <!-- How it works -->
+      <div style="padding:10px 16px;background:white">
+        <div style="font-size:0.65rem;color:#374151;font-weight:700;text-align:center;margin-bottom:8px">How It Works</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="text-align:center;flex:1"><div style="font-size:1rem">📋</div><div style="font-size:0.6rem;color:#64748b;margin-top:2px">Register</div></div>
+          <div style="color:#d1d5db;font-size:0.8rem">→</div>
+          <div style="text-align:center;flex:1"><div style="font-size:1rem">✅</div><div style="font-size:0.6rem;color:#64748b;margin-top:2px">Review</div></div>
+          <div style="color:#d1d5db;font-size:0.8rem">→</div>
+          <div style="text-align:center;flex:1"><div style="font-size:1rem">🔑</div><div style="font-size:0.6rem;color:#64748b;margin-top:2px">Get DID</div></div>
+          <div style="color:#d1d5db;font-size:0.8rem">→</div>
+          <div style="text-align:center;flex:1"><div style="font-size:1rem">🎖</div><div style="font-size:0.6rem;color:#64748b;margin-top:2px">Get VCs</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Dark Hero + Issuer Strip</h3>
+      <p>Bold dark hero, thin issuer logos bar, compact how-it-works flow. Professional, authority-forward feel. Best for a platform targeting govt/enterprise users.</p>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:white;padding:12px 16px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center">
+        <span style="color:#1e293b;font-weight:700;font-size:0.75rem">🔐 DID·VC Platform</span>
+        <div style="display:flex;gap:8px">
+          <span style="color:#64748b;font-size:0.65rem">Login</span>
+          <span style="background:#16a34a;color:white;font-size:0.65rem;padding:2px 8px;border-radius:4px">Register Corporate</span>
+        </div>
+      </div>
+      <!-- Hero light -->
+      <div style="background:linear-gradient(180deg,#eff6ff,#f0fdf4);padding:18px 16px;text-align:center">
+        <div style="font-size:0.72rem;color:#2563eb;font-weight:700;margin-bottom:4px">Powered by Blockchain • Backed by Govt</div>
+        <div style="font-size:0.95rem;color:#0f172a;font-weight:800;margin-bottom:8px">Your Corporate DID &<br/>Verifiable Credentials</div>
+        <div style="display:flex;gap:8px;justify-content:center">
+          <button style="background:#2563eb;color:white;border:none;padding:5px 14px;border-radius:6px;font-size:0.7rem;font-weight:600">Register Now</button>
+          <button style="background:white;color:#2563eb;border:1px solid #2563eb;padding:5px 14px;border-radius:6px;font-size:0.7rem">Login</button>
+        </div>
+      </div>
+      <!-- Issuer cards -->
+      <div style="padding:10px 16px;background:#f8fafc">
+        <div style="font-size:0.6rem;color:#94a3b8;margin-bottom:6px;font-weight:700;text-transform:uppercase">Authorised DID Issuers</div>
+        <div style="display:flex;gap:6px">
+          <div style="flex:1;background:white;border:1px solid #e2e8f0;border-radius:6px;padding:6px;text-align:center">
+            <div style="font-size:0.7rem;font-weight:800;color:#1e293b">IBDIC</div>
+            <div style="font-size:0.55rem;color:#64748b">Trade Finance</div>
+          </div>
+          <div style="flex:1;background:white;border:1px solid #e2e8f0;border-radius:6px;padding:6px;text-align:center">
+            <div style="font-size:0.7rem;font-weight:800;color:#1e293b">DGFT</div>
+            <div style="font-size:0.55rem;color:#64748b">Export/Import</div>
+          </div>
+          <div style="flex:1;background:white;border:1px solid #e2e8f0;border-radius:6px;padding:6px;text-align:center">
+            <div style="font-size:0.7rem;font-weight:800;color:#1e293b">NeSL</div>
+            <div style="font-size:0.55rem;color:#64748b">Legal Entity</div>
+          </div>
+        </div>
+      </div>
+      <!-- Steps -->
+      <div style="padding:10px 16px;background:white">
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:0.65rem;color:#374151">
+            <span style="background:#2563eb;color:white;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.55rem;font-weight:700;flex-shrink:0">1</span>
+            Submit company info + MCA/GST documents
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:0.65rem;color:#374151">
+            <span style="background:#7c3aed;color:white;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.55rem;font-weight:700;flex-shrink:0">2</span>
+            Portal Manager reviews → DID Issuer issues DID
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:0.65rem;color:#374151">
+            <span style="background:#16a34a;color:white;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.55rem;font-weight:700;flex-shrink:0">3</span>
+            VCs automatically issued to your corporate wallet
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Light with Issuer Cards + Numbered Steps</h3>
+      <p>Clean light theme. Issuer cards show domain context (IBDIC for Trade, DGFT for Export). Numbered steps make the process crystal clear. Friendly and approachable.</p>
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#0f172a;padding:10px 16px;display:flex;justify-content:space-between;align-items:center">
+        <span style="color:white;font-weight:700;font-size:0.75rem">🔐 DID·VC</span>
+        <span style="color:#94a3b8;font-size:0.65rem">Login →</span>
+      </div>
+      <!-- Split hero -->
+      <div style="display:flex;min-height:80px">
+        <div style="flex:1;background:linear-gradient(135deg,#1e3a5f,#312e81);padding:14px 12px;display:flex;flex-direction:column;justify-content:center">
+          <div style="font-size:0.85rem;color:white;font-weight:800;margin-bottom:4px">Corporate<br/>Digital ID</div>
+          <div style="font-size:0.6rem;color:#93c5fd;margin-bottom:8px">Register once.<br/>Verify everywhere.</div>
+          <button style="background:#2563eb;color:white;border:none;padding:4px 10px;border-radius:4px;font-size:0.62rem;font-weight:600;align-self:flex-start">Start Registration</button>
+        </div>
+        <div style="flex:1;background:#f8fafc;padding:10px 12px">
+          <div style="font-size:0.6rem;color:#374151;font-weight:700;margin-bottom:6px">AUTHORISED ISSUERS</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="background:white;border-left:3px solid #2563eb;padding:4px 8px;font-size:0.65rem;font-weight:700;color:#1e293b;border-radius:0 4px 4px 0">IBDIC — Trade Finance DID</div>
+            <div style="background:white;border-left:3px solid #16a34a;padding:4px 8px;font-size:0.65rem;font-weight:700;color:#1e293b;border-radius:0 4px 4px 0">DGFT — Export/Import DID</div>
+            <div style="background:white;border-left:3px solid #7c3aed;padding:4px 8px;font-size:0.65rem;font-weight:700;color:#1e293b;border-radius:0 4px 4px 0">NeSL — Legal Entity DID</div>
+            <div style="background:white;border-left:3px solid #f59e0b;padding:4px 8px;font-size:0.65rem;font-weight:700;color:#1e293b;border-radius:0 4px 4px 0">Protean — PAN Registry DID</div>
+          </div>
+        </div>
+      </div>
+      <!-- How it works -->
+      <div style="background:white;padding:8px 16px;border-top:1px solid #e2e8f0">
+        <div style="display:flex;gap:0;overflow:hidden;border-radius:6px;border:1px solid #e2e8f0">
+          <div style="flex:1;background:#eff6ff;padding:6px;text-align:center;border-right:1px solid #e2e8f0">
+            <div style="font-size:0.9rem">📋</div><div style="font-size:0.55rem;color:#2563eb;font-weight:600">Register</div>
+          </div>
+          <div style="flex:1;background:#faf5ff;padding:6px;text-align:center;border-right:1px solid #e2e8f0">
+            <div style="font-size:0.9rem">✅</div><div style="font-size:0.55rem;color:#7c3aed;font-weight:600">Review</div>
+          </div>
+          <div style="flex:1;background:#f0fdf4;padding:6px;text-align:center;border-right:1px solid #e2e8f0">
+            <div style="font-size:0.9rem">🔑</div><div style="font-size:0.55rem;color:#16a34a;font-weight:600">Get DID</div>
+          </div>
+          <div style="flex:1;background:#fff7ed;padding:6px;text-align:center">
+            <div style="font-size:0.9rem">🎖</div><div style="font-size:0.55rem;color:#d97706;font-weight:600">Get VCs</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Dark/Light Split + Issuer List</h3>
+      <p>Bold left/right split: left is the CTA, right is the issuer directory. Each issuer has a color-coded accent. Immediately communicates "who issues what" without extra reading.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:1rem">Click a layout to select it, then tell me in the terminal.</p>

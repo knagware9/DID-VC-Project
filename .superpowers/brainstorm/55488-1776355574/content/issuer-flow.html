@@ -1,0 +1,182 @@
+<h2>Back-office Flow — Portal Manager & DID Issuer</h2>
+<p class="subtitle">After corporate submits registration — two-stage approval before DID + VCs are issued</p>
+
+<div class="section">
+  <div class="split" style="gap:20px;align-items:flex-start">
+
+    <!-- Portal Manager -->
+    <div style="flex:1">
+      <div class="mockup" style="padding:0;overflow:hidden">
+        <div class="mockup-header" style="font-size:0.72rem">Portal Manager — Corporate Applications Queue</div>
+        <div class="mockup-body" style="padding:14px">
+
+          <div style="font-size:0.78rem;font-weight:700;color:#1e293b;margin-bottom:10px">
+            New Applications
+            <span style="background:#ef4444;color:white;font-size:0.6rem;padding:1px 6px;border-radius:8px;margin-left:6px">2 pending</span>
+          </div>
+
+          <!-- Application card -->
+          <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:white">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+              <div>
+                <div style="font-size:0.78rem;font-weight:700;color:#1e293b">FSV Labs Pvt Ltd</div>
+                <div style="font-size:0.62rem;color:#64748b">CIN: U72900MH2020PTC123456 · PAN: AABCU9603R</div>
+              </div>
+              <span style="background:#fef3c7;color:#92400e;font-size:0.58rem;padding:2px 7px;border-radius:8px;font-weight:600">PENDING</span>
+            </div>
+
+            <div style="font-size:0.62rem;color:#374151;margin-bottom:6px">
+              <span style="font-weight:600">Admin:</span> Kamlesh Nagware (admin@fsvlabs.com) ·
+              <span style="font-weight:600">Requester:</span> Priya Sharma
+            </div>
+
+            <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
+              <span style="background:#f1f5f9;color:#374151;font-size:0.58rem;padding:2px 7px;border-radius:8px;display:flex;align-items:center;gap:3px">
+                📄 MCARegistration <span style="color:#16a34a">✓ file</span>
+              </span>
+              <span style="background:#f1f5f9;color:#374151;font-size:0.58rem;padding:2px 7px;border-radius:8px">
+                📋 GSTINCredential (ref only)
+              </span>
+            </div>
+
+            <!-- Document preview links -->
+            <div style="background:#f8fafc;border-radius:5px;padding:6px 8px;margin-bottom:8px;font-size:0.6rem;color:#64748b">
+              📎 <a style="color:#2563eb;text-decoration:none">certificate_of_inc.pdf</a> · Submitted 2 hours ago
+            </div>
+
+            <div style="margin-bottom:8px">
+              <div style="font-size:0.62rem;font-weight:600;color:#374151;margin-bottom:3px">Assign to DID Issuer</div>
+              <div style="border:1px solid #e2e8f0;border-radius:5px;padding:5px 8px;font-size:0.7rem;color:#1e293b;background:white;display:flex;justify-content:space-between">
+                <span>IBDIC — Trade Finance DID</span>
+                <span style="color:#94a3b8">▼</span>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:6px">
+              <button style="flex:1;padding:5px;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;border-radius:5px;font-size:0.68rem;cursor:pointer">✗ Reject</button>
+              <button style="flex:2;padding:5px;background:#2563eb;color:white;border:none;border-radius:5px;font-size:0.68rem;font-weight:600;cursor:pointer">✓ Activate & Assign to Issuer</button>
+            </div>
+          </div>
+
+          <!-- Second application -->
+          <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;background:white;opacity:0.6">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-size:0.75rem;font-weight:700;color:#1e293b">Acme Exports Ltd</div>
+                <div style="font-size:0.6rem;color:#64748b">CIN: L12345MH2019PLC... · 3 documents</div>
+              </div>
+              <span style="background:#fef3c7;color:#92400e;font-size:0.58rem;padding:2px 7px;border-radius:8px;font-weight:600">PENDING</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- DID Issuer -->
+    <div style="flex:1">
+      <div class="mockup" style="padding:0;overflow:hidden">
+        <div class="mockup-header" style="font-size:0.72rem">DID Issuer (IBDIC) — Issue DID & Credentials</div>
+        <div class="mockup-body" style="padding:14px">
+
+          <div style="font-size:0.78rem;font-weight:700;color:#1e293b;margin-bottom:10px">
+            Ready to Issue
+            <span style="background:#2563eb;color:white;font-size:0.6rem;padding:1px 6px;border-radius:8px;margin-left:6px">1 assigned</span>
+          </div>
+
+          <div style="border:2px solid #2563eb;border-radius:8px;padding:12px;background:#eff6ff">
+            <div style="font-size:0.8rem;font-weight:700;color:#1e293b;margin-bottom:2px">FSV Labs Pvt Ltd</div>
+            <div style="font-size:0.62rem;color:#64748b;margin-bottom:8px">Assigned by Portal Manager · 10 min ago</div>
+
+            <!-- DID preview -->
+            <div style="background:white;border-radius:6px;padding:8px 10px;margin-bottom:8px">
+              <div style="font-size:0.6rem;font-weight:700;color:#374151;margin-bottom:3px">DID to be issued</div>
+              <div style="font-size:0.62rem;color:#2563eb;font-family:monospace">did:web:didvc.platform:fsv-labs-pvt-ltd</div>
+            </div>
+
+            <!-- VCs to issue -->
+            <div style="background:white;border-radius:6px;padding:8px 10px;margin-bottom:10px">
+              <div style="font-size:0.6rem;font-weight:700;color:#374151;margin-bottom:5px">VCs to issue against documents</div>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:#f0fdf4;border-radius:4px;border-left:3px solid #16a34a">
+                  <div>
+                    <div style="font-size:0.65rem;font-weight:600;color:#1e293b">MCARegistration</div>
+                    <div style="font-size:0.58rem;color:#64748b">📄 certificate_of_inc.pdf verified</div>
+                  </div>
+                  <input type="checkbox" checked style="accent-color:#16a34a" />
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:#f0fdf4;border-radius:4px;border-left:3px solid #16a34a">
+                  <div>
+                    <div style="font-size:0.65rem;font-weight:600;color:#1e293b">GSTINCredential</div>
+                    <div style="font-size:0.58rem;color:#64748b">📋 Ref: 27AABCU9603R1Z5</div>
+                  </div>
+                  <input type="checkbox" checked style="accent-color:#16a34a" />
+                </div>
+              </div>
+            </div>
+
+            <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:5px;padding:6px 8px;margin-bottom:10px;font-size:0.6rem;color:#92400e">
+              ⚡ Clicking "Issue" will: create the corporate DID · create super_admin + requester accounts · issue selected VCs to corporate wallet · send login emails
+            </div>
+
+            <button style="width:100%;padding:8px;background:#16a34a;color:white;border:none;border-radius:6px;font-size:0.78rem;font-weight:700;cursor:pointer">
+              🔑 Issue DID + Credentials →
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Corporate — after issuance -->
+    <div style="flex:1">
+      <div class="mockup" style="padding:0;overflow:hidden">
+        <div class="mockup-header" style="font-size:0.72rem">Corporate (after issuance) — Wallet & My Credentials</div>
+        <div class="mockup-body" style="padding:14px">
+
+          <div style="font-size:0.72rem;color:#64748b;margin-bottom:10px">
+            ✉️ <em>Login email sent to admin@fsvlabs.com</em>
+          </div>
+
+          <!-- Wallet tab toggle -->
+          <div style="display:flex;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;width:fit-content;margin-bottom:12px">
+            <div style="padding:5px 14px;background:#7c3aed;color:white;font-size:0.7rem;font-weight:600">🏢 Corporate Wallet</div>
+            <div style="padding:5px 14px;background:#f8fafc;color:#64748b;font-size:0.7rem;border-left:1px solid #e2e8f0">👤 My Credentials</div>
+          </div>
+
+          <!-- Corporate wallet credentials -->
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+            <div style="border:1px solid #e2e8f0;border-radius:7px;padding:9px 12px;background:white">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                  <div style="font-size:0.75rem;font-weight:700;color:#1e293b">MCARegistration</div>
+                  <div style="font-size:0.62rem;color:#64748b;margin-top:1px">Issued by IBDIC · Today</div>
+                  <div style="font-size:0.6rem;color:#94a3b8">Anchored on Besu ✓</div>
+                </div>
+                <span style="background:#dcfce7;color:#16a34a;font-size:0.58rem;padding:2px 7px;border-radius:8px;font-weight:600">ACTIVE</span>
+              </div>
+            </div>
+            <div style="border:1px solid #e2e8f0;border-radius:7px;padding:9px 12px;background:white">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                  <div style="font-size:0.75rem;font-weight:700;color:#1e293b">GSTINCredential</div>
+                  <div style="font-size:0.62rem;color:#64748b;margin-top:1px">Issued by IBDIC · Today</div>
+                  <div style="font-size:0.6rem;color:#94a3b8">Anchored on Besu ✓</div>
+                </div>
+                <span style="background:#dcfce7;color:#16a34a;font-size:0.58rem;padding:2px 7px;border-radius:8px;font-weight:600">ACTIVE</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#f0fdf4;border-radius:6px;padding:7px 10px;font-size:0.62rem;color:#16a34a">
+            🎉 Your corporate DID and credentials are ready. Share them with verifiers using the Proof Requests tab.
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<p class="subtitle">Left: Portal Manager activates + assigns issuer. Middle: DID Issuer issues DID + checks VCs to issue. Right: Corporate sees credentials in wallet after issuance. Does this flow look right?</p>

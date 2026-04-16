@@ -1,4 +1,23 @@
 services:
+  # Local Besu-compatible dev chain (Hardhat node — instant mining, EVM-compatible)
+  # For a real Hyperledger Besu network: set BESU_RPC_URL in .env to your Besu node
+  besu:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: >
+      sh -c "npm install --ignore-scripts 2>/dev/null; npx hardhat node --hostname 0.0.0.0 --port 8545"
+    ports:
+      - "8545:8545"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- --post-data='{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}' --header='Content-Type: application/json' http://localhost:8545 2>/dev/null | grep -q result"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    restart: unless-stopped
+
   postgres:
     image: postgres:15-alpine
     environment:
@@ -27,13 +46,16 @@ services:
     environment:
       - PORT=3001
       - DATABASE_URL=postgresql://didvc_user:didvc_pass@postgres:5432/didvc
-      - POLYGON_NETWORK=${POLYGON_NETWORK:-amoy}
-      - POLYGON_RPC_URL=${POLYGON_RPC_URL:-https://rpc-amoy.polygon.technology}
-      - POLYGON_PRIVATE_KEY=${POLYGON_PRIVATE_KEY:-}
+      - BESU_NETWORK=${BESU_NETWORK:-dev}
+      - BESU_RPC_URL=${BESU_RPC_URL:-http://besu:8545}
+      - BESU_PRIVATE_KEY=${BESU_PRIVATE_KEY:-}
+      - BESU_EXPLORER_URL=${BESU_EXPLORER_URL:-}
       - DID_REGISTRY_ADDRESS=${DID_REGISTRY_ADDRESS:-}
       - VC_REGISTRY_ADDRESS=${VC_REGISTRY_ADDRESS:-}
     depends_on:
       postgres:
+        condition: service_healthy
+      besu:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]

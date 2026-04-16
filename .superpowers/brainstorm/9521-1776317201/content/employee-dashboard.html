@@ -1,0 +1,172 @@
+<h2>Employee Dashboard — Proposed Layout</h2>
+<p class="subtitle">New tabs and dual-wallet view for corporate employees</p>
+
+<div class="section">
+  <div class="split" style="gap:24px;align-items:flex-start">
+
+    <!-- LEFT: Sidebar -->
+    <div style="width:220px;flex-shrink:0">
+      <div class="mockup" style="padding:0;overflow:hidden">
+        <div class="mockup-header" style="font-size:0.75rem">Left Sidebar (employee view)</div>
+        <div class="mockup-body" style="padding:0">
+          <div style="padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0">
+            <div style="font-size:0.65rem;color:#94a3b8;font-weight:700;letter-spacing:1px">DID VC PLATFORM</div>
+          </div>
+          <div style="padding:8px 0">
+            <div style="padding:8px 16px;font-size:0.8rem;color:#64748b;display:flex;align-items:center;gap:8px">
+              <span>🏷</span> My Credentials
+            </div>
+            <div style="padding:8px 16px;font-size:0.8rem;color:#64748b;display:flex;align-items:center;gap:8px">
+              <span>🛡</span> Proof Requests
+            </div>
+            <div style="padding:8px 16px;font-size:0.8rem;background:#eff6ff;color:#2563eb;border-right:3px solid #2563eb;display:flex;align-items:center;gap:8px;font-weight:600">
+              <span>💼</span> My Wallets
+            </div>
+            <div style="padding:8px 16px;font-size:0.8rem;color:#64748b;display:flex;align-items:center;gap:8px;background:#f0fdf4">
+              <span style="color:#16a34a">🔄</span> <span style="color:#16a34a;font-weight:600">Transactions</span>
+              <span style="margin-left:auto;background:#dcfce7;color:#16a34a;font-size:0.6rem;padding:1px 5px;border-radius:8px">NEW</span>
+            </div>
+          </div>
+          <div style="padding:12px 16px;border-top:1px solid #e2e8f0;margin-top:8px">
+            <div style="font-size:0.65rem;color:#94a3b8">priya.sharma@fsvlabs.com</div>
+            <div style="font-size:0.65rem;color:#94a3b8">Employee · FSV Labs</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Main content area showing "My Wallets" tab active -->
+    <div style="flex:1">
+      <div class="mockup" style="padding:0;overflow:hidden">
+        <div class="mockup-header" style="font-size:0.75rem">Main Content — My Wallets tab</div>
+        <div class="mockup-body" style="padding:16px">
+
+          <!-- Wallet toggle tabs -->
+          <div style="display:flex;gap:0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;width:fit-content;margin-bottom:20px">
+            <div style="padding:8px 20px;background:#2563eb;color:white;font-size:0.8rem;font-weight:600;cursor:pointer">
+              👤 Employee Wallet
+            </div>
+            <div style="padding:8px 20px;background:#f8fafc;color:#64748b;font-size:0.8rem;cursor:pointer;border-left:1px solid #e2e8f0">
+              🏢 Corporate Wallet
+            </div>
+          </div>
+
+          <!-- Employee Wallet content -->
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div>
+                <div style="font-size:0.75rem;font-weight:700;color:#1e293b">EmploymentCertificate</div>
+                <div style="font-size:0.65rem;color:#64748b;margin-top:2px">Issued by FSV Labs Pvt Ltd</div>
+                <div style="font-size:0.65rem;color:#94a3b8">Jan 2025 · Priya Sharma, Senior Engineer</div>
+              </div>
+              <span style="background:#dcfce7;color:#16a34a;font-size:0.6rem;padding:2px 8px;border-radius:10px;font-weight:600">ACTIVE</span>
+            </div>
+          </div>
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div>
+                <div style="font-size:0.75rem;font-weight:700;color:#1e293b">DesignationCertificate</div>
+                <div style="font-size:0.65rem;color:#64748b;margin-top:2px">Issued by FSV Labs Pvt Ltd</div>
+                <div style="font-size:0.65rem;color:#94a3b8">Jan 2025 · Senior Software Engineer</div>
+              </div>
+              <span style="background:#dcfce7;color:#16a34a;font-size:0.6rem;padding:2px 8px;border-radius:10px;font-weight:600">ACTIVE</span>
+            </div>
+          </div>
+
+          <div style="margin-top:16px;padding:8px 12px;background:#eff6ff;border-radius:6px;font-size:0.7rem;color:#3b82f6">
+            ℹ️ These are credentials issued directly to your identity (sub-DID). Only you can share them.
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Corporate wallet view -->
+<div class="section">
+  <div class="mockup" style="padding:0;overflow:hidden">
+    <div class="mockup-header" style="font-size:0.75rem">Corporate Wallet tab — what employee sees (filtered by admin-granted permissions)</div>
+    <div class="mockup-body" style="padding:16px">
+
+      <div style="display:flex;gap:0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;width:fit-content;margin-bottom:20px">
+        <div style="padding:8px 20px;background:#f8fafc;color:#64748b;font-size:0.8rem;cursor:pointer">
+          👤 Employee Wallet
+        </div>
+        <div style="padding:8px 20px;background:#7c3aed;color:white;font-size:0.8rem;font-weight:600;cursor:pointer;border-left:1px solid #e2e8f0">
+          🏢 Corporate Wallet
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;flex:1;min-width:200px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-size:0.75rem;font-weight:700;color:#1e293b">IECCredential</div>
+              <div style="font-size:0.65rem;color:#64748b;margin-top:2px">Issued by DGFT</div>
+              <div style="font-size:0.65rem;color:#94a3b8">IEC No: ABCDE1234F</div>
+            </div>
+            <span style="background:#dcfce7;color:#16a34a;font-size:0.6rem;padding:2px 8px;border-radius:10px;font-weight:600">CAN SHARE</span>
+          </div>
+        </div>
+
+        <div style="background:#fafafa;border:1px dashed #cbd5e1;border-radius:8px;padding:12px;flex:1;min-width:200px;opacity:0.6">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-size:0.75rem;font-weight:700;color:#94a3b8">MCARegistration</div>
+              <div style="font-size:0.65rem;color:#94a3b8;margin-top:2px">Issued by MCA</div>
+            </div>
+            <span style="background:#f1f5f9;color:#94a3b8;font-size:0.6rem;padding:2px 8px;border-radius:10px;font-weight:600">NO ACCESS</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="padding:8px 12px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:6px;font-size:0.7rem;color:#7c3aed">
+        🔐 Corporate credentials you are authorized to share are granted by FSV Labs admin. Contact admin for access changes.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Transactions tab preview -->
+<div class="section">
+  <div class="mockup" style="padding:0;overflow:hidden">
+    <div class="mockup-header" style="font-size:0.75rem">Transactions tab — unified timeline</div>
+    <div class="mockup-body" style="padding:16px">
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+
+        <div style="border-left:3px solid #3b82f6;padding:10px 12px;background:#eff6ff;border-radius:0 8px 8px 0">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:0.75rem;font-weight:700;color:#1e293b">📥 Proof Request Received</div>
+            <span style="font-size:0.65rem;color:#94a3b8">2 hours ago</span>
+          </div>
+          <div style="font-size:0.68rem;color:#64748b;margin-top:4px">HDFC Bank requested <strong>EmploymentCertificate, IECCredential</strong></div>
+          <span style="background:#dbeafe;color:#2563eb;font-size:0.6rem;padding:1px 6px;border-radius:8px;font-weight:600;margin-top:4px;display:inline-block">PENDING</span>
+        </div>
+
+        <div style="border-left:3px solid #16a34a;padding:10px 12px;background:#f0fdf4;border-radius:0 8px 8px 0">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:0.75rem;font-weight:700;color:#1e293b">📤 Presentation Submitted</div>
+            <span style="font-size:0.65rem;color:#94a3b8">Yesterday, 3:45 PM</span>
+          </div>
+          <div style="font-size:0.68rem;color:#64748b;margin-top:4px">Shared <strong>EmploymentCertificate</strong> with HDFC Bank</div>
+          <span style="background:#dcfce7;color:#16a34a;font-size:0.6rem;padding:1px 6px;border-radius:8px;font-weight:600;margin-top:4px;display:inline-block">SUBMITTED</span>
+        </div>
+
+        <div style="border-left:3px solid #16a34a;padding:10px 12px;background:#f0fdf4;border-radius:0 8px 8px 0">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:0.75rem;font-weight:700;color:#1e293b">📤 Presentation Submitted</div>
+            <span style="font-size:0.65rem;color:#94a3b8">3 days ago</span>
+          </div>
+          <div style="font-size:0.68rem;color:#64748b;margin-top:4px">Shared <strong>IECCredential (Corporate)</strong> with State Bank · <em>on behalf of FSV Labs</em></div>
+          <span style="background:#dcfce7;color:#16a34a;font-size:0.6rem;padding:1px 6px;border-radius:8px;font-weight:600;margin-top:4px;display:inline-block">VERIFIED</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

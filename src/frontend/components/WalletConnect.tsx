@@ -25,7 +25,7 @@ const WalletConnect: React.FC<WalletConnectProps> = ({
   const fetchBalance = async () => {
     if (!walletAddress) return;
     try {
-      const response = await fetch(`/api/polygon/connect`, {
+      const response = await fetch(`/api/besu/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address: walletAddress }),

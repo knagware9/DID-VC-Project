@@ -1,0 +1,163 @@
+<h2>Verifier — New Proof Request Flow</h2>
+<p class="subtitle">HDFC Bank selects corporate org → picks employee → specifies credentials</p>
+
+<div class="section">
+  <div class="split" style="gap:24px;align-items:flex-start">
+
+    <!-- STEP 1 -->
+    <div style="flex:1">
+      <div class="mockup" style="padding:0;overflow:hidden">
+        <div class="mockup-header" style="font-size:0.75rem">Step 1 — Select Corporate Organisation</div>
+        <div class="mockup-body" style="padding:16px">
+
+          <div style="margin-bottom:14px">
+            <div style="font-size:0.7rem;font-weight:600;color:#374151;margin-bottom:4px">Target Organisation</div>
+            <div style="border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;background:white;font-size:0.8rem;color:#1e293b;display:flex;justify-content:space-between;align-items:center">
+              <span>FSV Labs Pvt Ltd</span>
+              <span style="color:#94a3b8;font-size:0.7rem">▼</span>
+            </div>
+            <div style="font-size:0.65rem;color:#94a3b8;margin-top:3px">Select from registered corporates on the platform</div>
+          </div>
+
+          <!-- org card -->
+          <div style="border:2px solid #2563eb;border-radius:8px;padding:10px 12px;background:#eff6ff">
+            <div style="font-size:0.78rem;font-weight:700;color:#1e293b">FSV Labs Pvt Ltd</div>
+            <div style="font-size:0.65rem;color:#64748b;margin-top:2px">DID: did:web:didvc.platform:fsv-labs-pvt-ltd</div>
+            <div style="font-size:0.65rem;color:#64748b">3 active employees · IEC, MCA, GSTN credentials held</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div style="flex:1">
+      <div class="mockup" style="padding:0;overflow:hidden">
+        <div class="mockup-header" style="font-size:0.75rem">Step 2 — Select Employee</div>
+        <div class="mockup-body" style="padding:16px">
+
+          <div style="margin-bottom:10px">
+            <div style="font-size:0.7rem;font-weight:600;color:#374151;margin-bottom:4px">Search Employee</div>
+            <div style="border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;background:white;font-size:0.8rem;color:#94a3b8;display:flex;justify-content:space-between">
+              <span>Search by name or email...</span>
+              <span>🔍</span>
+            </div>
+          </div>
+
+          <!-- employee results -->
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="border:2px solid #2563eb;border-radius:8px;padding:10px 12px;background:#eff6ff;cursor:pointer">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div>
+                  <div style="font-size:0.78rem;font-weight:700;color:#1e293b">Priya Sharma</div>
+                  <div style="font-size:0.65rem;color:#64748b">priya.sharma@fsvlabs.com · Senior Engineer</div>
+                  <div style="font-size:0.6rem;color:#94a3b8;margin-top:2px">did:web:...fsv-labs:employee:8a290623</div>
+                </div>
+                <span style="background:#2563eb;color:white;font-size:0.6rem;padding:2px 7px;border-radius:8px">SELECTED</span>
+              </div>
+            </div>
+
+            <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;background:#fafafa;cursor:pointer;opacity:0.7">
+              <div style="font-size:0.78rem;font-weight:700;color:#1e293b">Arjun Mehta</div>
+              <div style="font-size:0.65rem;color:#64748b">arjun.mehta@fsvlabs.com · Product Manager</div>
+              <div style="font-size:0.6rem;color:#94a3b8;margin-top:2px">did:web:...fsv-labs:employee:d9a998a8</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div style="flex:1">
+      <div class="mockup" style="padding:0;overflow:hidden">
+        <div class="mockup-header" style="font-size:0.75rem">Step 3 — Specify Credentials & Submit</div>
+        <div class="mockup-body" style="padding:16px">
+
+          <div style="margin-bottom:12px">
+            <div style="font-size:0.7rem;font-weight:600;color:#374151;margin-bottom:6px">Required Credential Types</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.75rem;cursor:pointer">
+                <input type="checkbox" checked style="accent-color:#2563eb"> EmploymentCertificate
+                <span style="font-size:0.6rem;color:#94a3b8">(Employee)</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.75rem;cursor:pointer">
+                <input type="checkbox" checked style="accent-color:#2563eb"> IECCredential
+                <span style="font-size:0.6rem;color:#94a3b8">(Corporate)</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.75rem;cursor:pointer">
+                <input type="checkbox" style="accent-color:#2563eb"> MCARegistration
+                <span style="font-size:0.6rem;color:#94a3b8">(Corporate)</span>
+              </label>
+            </div>
+          </div>
+
+          <div style="margin-bottom:12px">
+            <div style="font-size:0.7rem;font-weight:600;color:#374151;margin-bottom:4px">Purpose / Note</div>
+            <div style="border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;background:white;font-size:0.75rem;color:#64748b">
+              KYC verification for trade finance application
+            </div>
+          </div>
+
+          <button style="width:100%;padding:8px;background:#2563eb;color:white;border:none;border-radius:6px;font-size:0.8rem;font-weight:600;cursor:pointer">
+            Send Proof Request →
+          </button>
+
+          <div style="margin-top:10px;padding:8px 10px;background:#f0fdf4;border-radius:6px;font-size:0.65rem;color:#16a34a">
+            ✓ Request will be sent to Priya Sharma's dashboard (priya.sharma@fsvlabs.com)
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Admin permission management preview -->
+<div class="section">
+  <div class="mockup" style="padding:0;overflow:hidden">
+    <div class="mockup-header" style="font-size:0.75rem">Corporate Admin — Employee Credential Permissions (Employees tab)</div>
+    <div class="mockup-body" style="padding:16px">
+      <p style="font-size:0.75rem;color:#64748b;margin-bottom:12px">Admin assigns which corporate credential types each employee is permitted to share on behalf of the org.</p>
+
+      <table style="width:100%;border-collapse:collapse;font-size:0.72rem">
+        <thead>
+          <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0">
+            <th style="text-align:left;padding:8px 10px;color:#374151">Employee</th>
+            <th style="text-align:center;padding:8px 10px;color:#374151">IECCredential</th>
+            <th style="text-align:center;padding:8px 10px;color:#374151">MCARegistration</th>
+            <th style="text-align:center;padding:8px 10px;color:#374151">GSTINCredential</th>
+            <th style="text-align:center;padding:8px 10px;color:#374151">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid #f1f5f9">
+            <td style="padding:8px 10px">
+              <div style="font-weight:600;color:#1e293b">Priya Sharma</div>
+              <div style="color:#94a3b8;font-size:0.65rem">priya.sharma@fsvlabs.com</div>
+            </td>
+            <td style="text-align:center;padding:8px 10px"><span style="color:#16a34a;font-size:1rem">✓</span></td>
+            <td style="text-align:center;padding:8px 10px"><span style="color:#e11d48;font-size:1rem">✗</span></td>
+            <td style="text-align:center;padding:8px 10px"><span style="color:#e11d48;font-size:1rem">✗</span></td>
+            <td style="text-align:center;padding:8px 10px">
+              <button style="font-size:0.65rem;padding:3px 8px;border:1px solid #2563eb;color:#2563eb;background:white;border-radius:4px;cursor:pointer">Edit</button>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 10px">
+              <div style="font-weight:600;color:#1e293b">Arjun Mehta</div>
+              <div style="color:#94a3b8;font-size:0.65rem">arjun.mehta@fsvlabs.com</div>
+            </td>
+            <td style="text-align:center;padding:8px 10px"><span style="color:#16a34a;font-size:1rem">✓</span></td>
+            <td style="text-align:center;padding:8px 10px"><span style="color:#16a34a;font-size:1rem">✓</span></td>
+            <td style="text-align:center;padding:8px 10px"><span style="color:#e11d48;font-size:1rem">✗</span></td>
+            <td style="text-align:center;padding:8px 10px">
+              <button style="font-size:0.65rem;padding:3px 8px;border:1px solid #2563eb;color:#2563eb;background:white;border-radius:4px;cursor:pointer">Edit</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
