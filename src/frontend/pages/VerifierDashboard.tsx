@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { useAppShell } from '../components/AppShell';
-import BlockchainBadge from '../components/BlockchainBadge';
 import LedgerModal from '../components/LedgerModal';
 
 type TeamMember = {
@@ -38,7 +37,6 @@ export default function VerifierDashboard() {
   const [corpEmployees, setCorpEmployees] = useState<any[]>([]);
   const [empSearch, setEmpSearch] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
-  const [newReqHolderDid, setNewReqHolderDid] = useState('');
   const [newReqCredTypes, setNewReqCredTypes] = useState('');
   const [newReqPurpose, setNewReqPurpose] = useState('');
   const [newReqMsg, setNewReqMsg] = useState('');
@@ -57,10 +55,11 @@ export default function VerifierDashboard() {
   const canApproveReject = !subRole || ['checker', 'super_admin'].includes(subRole);
 
   useEffect(() => {
-    if (tab === 'new') { loadCorporates(); setReqStep(1); }
+    if (tab === 'new') { loadCorporates(); setReqStep(1); setEmpSearch(''); setNewReqMsg(''); }
     if (tab === 'requests') loadRequests();
     if (tab === 'received') loadReceived();
     if (tab === 'team') loadTeam();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
   async function loadReceived() {
@@ -114,6 +113,7 @@ export default function VerifierDashboard() {
   }
 
   async function handleSendProofRequest() {
+    if (!token) return;
     if (!selectedEmployee || !newReqCredTypes.trim()) {
       setNewReqMsg('Select an employee and specify at least one credential type');
       return;
@@ -138,7 +138,7 @@ export default function VerifierDashboard() {
       setSelectedCorp(null);
       setCorpEmployees([]);
       setSelectedEmployee(null);
-      setNewReqHolderDid('');
+      setEmpSearch('');
       setNewReqCredTypes('');
       setNewReqPurpose('');
     } catch (err: any) {
@@ -253,7 +253,7 @@ export default function VerifierDashboard() {
               <div className="card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                   <h4 style={{ margin: 0 }}>Select Employee — {selectedCorp.name}</h4>
-                  <button onClick={() => { setReqStep(1); setSelectedCorp(null); setCorpEmployees([]); setSelectedEmployee(null); }}
+                  <button onClick={() => { setReqStep(1); setSelectedCorp(null); setCorpEmployees([]); setSelectedEmployee(null); setEmpSearch(''); }}
                     style={{ fontSize: '0.75rem', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}>
                     ← Back
                   </button>
@@ -277,7 +277,7 @@ export default function VerifierDashboard() {
                       )
                       .map((emp: any) => (
                         <div key={emp.id}
-                          onClick={() => { setSelectedEmployee(emp); setNewReqHolderDid(emp.employee_did); setReqStep(3); }}
+                          onClick={() => { setSelectedEmployee(emp); setReqStep(3); }}
                           style={{ padding: '12px', border: `2px solid ${selectedEmployee?.id === emp.id ? '#2563eb' : '#e2e8f0'}`,
                             borderRadius: 8, cursor: 'pointer', background: selectedEmployee?.id === emp.id ? '#eff6ff' : 'white' }}>
                           <div style={{ fontWeight: 700 }}>{emp.name}</div>
