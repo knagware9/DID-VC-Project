@@ -154,6 +154,24 @@ export default function AuthorityDashboard() {
     finally { setLoading(false); }
   }
 
+  async function handleMakerReview(appId: string) {
+    setLoading(true);
+    setCorpAppMsg('');
+    try {
+      const res = await fetch(`/api/did-issuer/corporate-applications/${appId}/maker-review`, {
+        method: 'POST',
+        headers: authHeader(),
+        body: '{}',
+      });
+      let data: any = {};
+      try { data = await res.json(); } catch { /* non-JSON */ }
+      if (!res.ok) throw new Error(data.error || 'Maker review failed');
+      setCorpAppMsg('✅ Sent to checker.');
+      loadCorpApplications();
+    } catch (e: any) { setCorpAppMsg(e.message); }
+    finally { setLoading(false); }
+  }
+
   async function loadDidRequests() {
     try {
       const res = await fetch('/api/authority/did-requests', { headers: authHeader() });
@@ -747,11 +765,13 @@ export default function AuthorityDashboard() {
         </>
       )}
 
-      {/* ── Corp Applications (did_issuer_admin only) ── */}
+      {/* ── Corp Applications (role-aware: maker / checker / super_admin) ── */}
       {view === 'corp-applications' && (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-            <h2 style={{ margin: 0 }}>Corporate Applications — Ready to Issue</h2>
+            <h2 style={{ margin: 0 }}>
+              {subRole === 'maker' ? 'Corporate Applications — Awaiting Review' : 'Corporate Applications — Ready to Issue'}
+            </h2>
           </div>
 
           {corpAppMsg && (
@@ -768,7 +788,7 @@ export default function AuthorityDashboard() {
 
           {corpApps.length === 0 && (
             <div className="card" style={{ textAlign: 'center', padding: '2rem', color: '#888' }}>
-              No applications assigned to you yet.
+              {subRole === 'maker' ? 'No applications awaiting maker review.' : 'No applications ready to issue.'}
             </div>
           )}
 
@@ -779,63 +799,99 @@ export default function AuthorityDashboard() {
             const myVcTypes = selectedVcTypes[app.id] || [];
 
             return (
-              <div key={app.id} className="card" style={{ marginBottom: '1.5rem', padding: '1.5rem', border: '2px solid #2563eb' }}>
+              <div key={app.id} className="card" style={{ marginBottom: '1.5rem', padding: '1.5rem', border: `2px solid ${subRole === 'maker' ? '#f59e0b' : '#2563eb'}` }}>
                 <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1e293b', marginBottom: '0.25rem' }}>{app.company_name}</div>
-                <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.75rem' }}>CIN: {app.cin} · Admin: {app.super_admin_email}</div>
-
-                {/* DID Preview */}
-                <div style={{ background: 'white', borderRadius: 6, padding: '0.6rem 0.9rem', marginBottom: '0.75rem', border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#374151', marginBottom: '0.25rem' }}>DID to be issued</div>
-                  <code style={{ fontSize: '0.72rem', color: '#2563eb', wordBreak: 'break-all' }}>{didPreview}</code>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.25rem' }}>
+                  CIN: {app.cin} · Signatory: {app.signatory_name || '—'}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.75rem' }}>
+                  Submitted: {app.created_at ? new Date(app.created_at).toLocaleDateString() : '—'}
+                  {app.maker_name && <span> · Reviewed by: {app.maker_name}</span>}
                 </div>
 
-                {/* VCs to issue */}
+                {/* Documents */}
                 <div style={{ background: 'white', borderRadius: 6, padding: '0.75rem', marginBottom: '0.75rem', border: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem' }}>VCs to issue against documents</div>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem' }}>
+                    {subRole === 'maker' ? 'Documents' : 'VCs to issue against documents'}
+                  </div>
                   {docs.length === 0 && <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>No documents</span>}
                   {docs.map((doc: any, i: number) => (
-                    <label key={i} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '0.4rem 0.75rem', borderRadius: 4, marginBottom: '0.35rem', cursor: 'pointer',
-                      background: myVcTypes.includes(doc.vc_type) ? '#f0fdf4' : '#f8fafc',
-                      borderLeft: `3px solid ${myVcTypes.includes(doc.vc_type) ? '#16a34a' : '#e2e8f0'}`,
-                    }}>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#1e293b' }}>{doc.vc_type}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                          {doc.file_path ? `📄 ${doc.file_path.split('/').pop()}` : `📋 Ref: ${doc.reference_number}`}
+                    subRole === 'maker' ? (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.4rem 0.75rem', borderRadius: 4, marginBottom: '0.35rem', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#1e293b' }}>{doc.vc_type}</div>
+                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                            {doc.file_path
+                              ? <a href={`/${doc.file_path}`} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>📄 {doc.file_path.split('/').pop()}</a>
+                              : `📋 Ref: ${doc.reference_number}`}
+                          </div>
                         </div>
                       </div>
-                      <input
-                        type="checkbox"
-                        checked={myVcTypes.includes(doc.vc_type)}
-                        onChange={() => setSelectedVcTypes(prev => {
-                          const current = prev[app.id] || [];
-                          return {
-                            ...prev,
-                            [app.id]: current.includes(doc.vc_type)
-                              ? current.filter(t => t !== doc.vc_type)
-                              : [...current, doc.vc_type],
-                          };
-                        })}
-                        style={{ accentColor: '#16a34a', width: 16, height: 16 }}
-                      />
-                    </label>
+                    ) : (
+                      <label key={i} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '0.4rem 0.75rem', borderRadius: 4, marginBottom: '0.35rem', cursor: 'pointer',
+                        background: myVcTypes.includes(doc.vc_type) ? '#f0fdf4' : '#f8fafc',
+                        borderLeft: `3px solid ${myVcTypes.includes(doc.vc_type) ? '#16a34a' : '#e2e8f0'}`,
+                      }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#1e293b' }}>{doc.vc_type}</div>
+                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                            {doc.file_path ? `📄 ${doc.file_path.split('/').pop()}` : `📋 Ref: ${doc.reference_number}`}
+                          </div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={myVcTypes.includes(doc.vc_type)}
+                          onChange={() => setSelectedVcTypes(prev => {
+                            const current = prev[app.id] || [];
+                            return {
+                              ...prev,
+                              [app.id]: current.includes(doc.vc_type)
+                                ? current.filter(t => t !== doc.vc_type)
+                                : [...current, doc.vc_type],
+                            };
+                          })}
+                          style={{ accentColor: '#16a34a', width: 16, height: 16 }}
+                        />
+                      </label>
+                    )
                   ))}
                 </div>
 
-                {/* Warning */}
-                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, padding: '0.6rem 0.75rem', marginBottom: '1rem', fontSize: '0.75rem', color: '#92400e' }}>
-                  ⚡ Clicking "Issue" will: create the corporate DID · create super_admin + requester accounts · issue selected VCs to corporate wallet · log temp passwords to server console
-                </div>
+                {/* DID Preview (checker/super_admin only) */}
+                {subRole !== 'maker' && (
+                  <div style={{ background: 'white', borderRadius: 6, padding: '0.6rem 0.9rem', marginBottom: '0.75rem', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#374151', marginBottom: '0.25rem' }}>DID to be issued</div>
+                    <code style={{ fontSize: '0.72rem', color: '#2563eb', wordBreak: 'break-all' }}>{didPreview}</code>
+                  </div>
+                )}
 
-                <button
-                  style={{ width: '100%', padding: '0.75rem', background: loading ? '#94a3b8' : '#16a34a', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.95rem', cursor: loading ? 'default' : 'pointer' }}
-                  disabled={loading}
-                  onClick={() => handleIssueCorpDID(app.id)}
-                >
-                  🔑 Issue DID + Credentials →
-                </button>
+                {/* Warning (checker/super_admin only) */}
+                {subRole !== 'maker' && (
+                  <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, padding: '0.6rem 0.75rem', marginBottom: '1rem', fontSize: '0.75rem', color: '#92400e' }}>
+                    ⚡ Clicking "Issue" will: create the corporate DID · create super_admin + requester accounts · issue selected VCs to corporate wallet · log temp passwords to server console
+                  </div>
+                )}
+
+                {/* Action button */}
+                {subRole === 'maker' ? (
+                  <button
+                    style={{ width: '100%', padding: '0.75rem', background: loading ? '#94a3b8' : '#f59e0b', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.95rem', cursor: loading ? 'default' : 'pointer' }}
+                    disabled={loading}
+                    onClick={() => handleMakerReview(app.id)}
+                  >
+                    Send to Checker →
+                  </button>
+                ) : (
+                  <button
+                    style={{ width: '100%', padding: '0.75rem', background: loading ? '#94a3b8' : '#16a34a', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: '0.95rem', cursor: loading ? 'default' : 'pointer' }}
+                    disabled={loading}
+                    onClick={() => handleIssueCorpDID(app.id)}
+                  >
+                    🔑 Issue DID + Credentials →
+                  </button>
+                )}
               </div>
             );
           })}
