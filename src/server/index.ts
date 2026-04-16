@@ -2690,7 +2690,7 @@ app.get('/api/portal/corporate-applications', requireAuth, requireRole('portal_m
          u.name AS assigned_issuer_name, u.email AS assigned_issuer_email
        FROM organization_applications oa
        LEFT JOIN users u ON u.id = oa.assigned_issuer_id
-       WHERE oa.application_status IN ('pending', 'activated', 'issued', 'rejected')
+       WHERE oa.application_status IN ('pending', 'signatory_approved', 'maker_reviewed', 'activated', 'issued', 'rejected')
          AND oa.super_admin_email IS NOT NULL
        ORDER BY oa.created_at DESC`,
       []
@@ -2764,6 +2764,7 @@ app.post('/api/did-issuer/corporate-applications/:id/issue', requireAuth, requir
   try {
     const user = (req as any).user;
     const subRole: string = user.sub_role || '';
+    // requireSubRole only accepts a single value; inline check used for multi-role enforcement
     if (subRole !== 'checker' && subRole !== 'super_admin') {
       return res.status(403).json({ error: 'checker or super_admin sub_role required' });
     }
