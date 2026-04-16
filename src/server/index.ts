@@ -2442,11 +2442,12 @@ function buildCorporateVC(vcType: string, app: any, issuerDid: any, holderDid: s
 app.get('/api/public/did-issuers', async (_req, res) => {
   try {
     const result = await query(
-      `SELECT u.id, u.name, u.email
-       FROM users u
-       WHERE u.role = 'government_agency'
-         AND u.sub_role = 'did_issuer_admin'
-       ORDER BY u.name`,
+      `SELECT id, name, email
+       FROM users
+       WHERE role = 'government_agency'
+         AND sub_role = 'super_admin'
+         AND org_id = id
+       ORDER BY name`,
       []
     );
     res.json({ success: true, issuers: result.rows });
@@ -2478,9 +2479,12 @@ app.post('/api/organizations/apply',
         company_name, cin, company_status, company_category, date_of_incorporation,
         pan_number, gstn, ie_code,
         director_name, din, designation, signing_authority_level,
-        // new fields
+        // key people
         super_admin_name, super_admin_email,
         requester_name, requester_email,
+        // signatory + issuer (new)
+        signatory_name, signatory_email,
+        assigned_issuer_id,
         documents: documentsJson,
       } = req.body as Record<string, string>;
 
@@ -2488,9 +2492,20 @@ app.post('/api/organizations/apply',
       const requiredFields = [org_name, email, state, pincode,
         company_name, cin, company_status, company_category,
         date_of_incorporation, pan_number,
-        super_admin_name, super_admin_email, requester_name, requester_email];
+        super_admin_name, super_admin_email, requester_name, requester_email,
+        signatory_name, signatory_email, assigned_issuer_id];
       if (requiredFields.some(v => !v)) {
         return res.status(400).json({ error: 'All required fields must be provided' });
+      }
+
+      // Validate assigned_issuer_id is a valid government_agency super_admin who self-owns their org
+      const issuerCheck = await query(
+        `SELECT id FROM users
+         WHERE id = $1 AND role = 'government_agency' AND sub_role = 'super_admin' AND org_id = id`,
+        [assigned_issuer_id]
+      );
+      if (issuerCheck.rows.length === 0) {
+        return res.status(400).json({ error: 'Invalid DID Issuer selected' });
       }
 
       // Duplicate CIN check
@@ -2525,15 +2540,28 @@ app.post('/api/organizations/apply',
         return res.status(400).json({ error: 'MCA Registration document is required' });
       }
 
+      // Create signatory account (org_id = NULL — patched at issuance)
+      const signatoryTempPass = crypto.randomBytes(8).toString('hex');
+      const signatoryHash = await hashPassword(signatoryTempPass);
+      const signatoryResult = await query(
+        `INSERT INTO users (email, password_hash, role, name, sub_role, org_id)
+         VALUES ($1, $2, 'corporate', $3, 'authorized_signatory', NULL)
+         RETURNING id`,
+        [signatory_email, signatoryHash, signatory_name]
+      );
+      const signatoryUserId = signatoryResult.rows[0].id;
+      console.log(`[SUBMITTED] signatory: ${signatory_email} | password: ${signatoryTempPass}`);
+
       const result = await query(
         `INSERT INTO organization_applications
           (org_name, email, org_logo_url, director_full_name, aadhaar_number, dob, gender,
            state, pincode, company_name, cin, company_status, company_category,
            date_of_incorporation, pan_number, gstn, ie_code, director_name, din, designation,
            signing_authority_level,
-           super_admin_name, super_admin_email, requester_name, requester_email, documents)
+           super_admin_name, super_admin_email, requester_name, requester_email, documents,
+           signatory_name, signatory_email, signatory_user_id, assigned_issuer_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
-                 $22,$23,$24,$25,$26)
+                 $22,$23,$24,$25,$26,$27,$28,$29,$30)
          RETURNING id`,
         [
           org_name, email, org_logo_url || null,
@@ -2544,10 +2572,15 @@ app.post('/api/organizations/apply',
           director_name || '', din || '', designation || '', signing_authority_level || 'Single Signatory',
           super_admin_name, super_admin_email, requester_name, requester_email,
           JSON.stringify(documents),
+          signatory_name, signatory_email, signatoryUserId, assigned_issuer_id,
         ]
       );
 
-      res.json({ success: true, applicationId: result.rows[0].id });
+      res.json({
+        success: true,
+        applicationId: result.rows[0].id,
+        signatory_temp_password: signatoryTempPass,
+      });
     } catch (error: any) {
       console.error('Apply error:', error);
       res.status(500).json({ error: error.message });
