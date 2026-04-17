@@ -2,8 +2,11 @@
 /**
  * generate-static-nodes.mjs
  * Reads besu/network/keys/node{1..5}/key.pub files and writes
- * besu/network/static-nodes.json with enode URLs using Docker Compose
- * service hostnames (besu-node1 … besu-node5).
+ * besu/network/static-nodes.json with enode URLs.
+ *
+ * Uses static IPs from the besu-network Docker subnet (172.16.239.11-15)
+ * because Besu's static-nodes parser requires IP addresses, not hostnames.
+ * These IPs must match the ipv4_address assignments in docker-compose.yml.
  *
  * Usage: node scripts/generate-static-nodes.mjs <network-dir>
  *   e.g: node scripts/generate-static-nodes.mjs ./besu/network
@@ -13,6 +16,16 @@ import { join, resolve } from 'path';
 
 const networkDir = resolve(process.argv[2] || '.');
 const keysDir = join(networkDir, 'keys');
+
+// Static IPs assigned to each node in docker-compose.yml (besu-network subnet 172.16.239.0/24)
+// node1 → .11, node2 → .12, ..., node5 → .15
+const NODE_IPS = [
+  '172.16.239.11',
+  '172.16.239.12',
+  '172.16.239.13',
+  '172.16.239.14',
+  '172.16.239.15',
+];
 
 // Validate keysDir exists before readdirSync
 if (!statSync(keysDir, { throwIfNoEntry: false })?.isDirectory()) {
@@ -27,6 +40,11 @@ const keyDirs = readdirSync(keysDir)
 
 if (keyDirs.length === 0) {
   console.error(`[generate-static-nodes] No key directories found in ${keysDir}`);
+  process.exit(1);
+}
+
+if (keyDirs.length !== NODE_IPS.length) {
+  console.error(`[generate-static-nodes] Expected ${NODE_IPS.length} key directories, found ${keyDirs.length}`);
   process.exit(1);
 }
 
@@ -48,8 +66,8 @@ const enodes = keyDirs.map((dir, index) => {
     );
     process.exit(1);
   }
-  const host = `besu-node${index + 1}`;
-  return `enode://${pubKey}@${host}:${P2P_PORT}`;
+  const ip = NODE_IPS[index];
+  return `enode://${pubKey}@${ip}:${P2P_PORT}`;
 });
 
 const outputPath = join(networkDir, 'static-nodes.json');

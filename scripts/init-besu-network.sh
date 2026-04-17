@@ -49,17 +49,30 @@ fi
 # ── Generate genesis + key pairs using Besu ────────────────────────────────────
 log "Running besu operator generate-blockchain-config..."
 
+# Besu's besu-entry.sh entrypoint does a --print-paths-and-exit pre-run that
+# creates the --to directory before the actual command, causing "already exists".
+# Fix: bypass besu-entry.sh and call /opt/besu/bin/besu directly.
+# Use a named (non-ephemeral) container so we can docker cp the output out.
+INIT_CONTAINER="besu-qbft-init"
 rm -rf "$TEMP_DIR"
 mkdir -p "$TEMP_DIR"
 
-docker run --rm \
+# Remove any leftover container from a previous failed run
+docker rm "$INIT_CONTAINER" 2>/dev/null || true
+
+docker run \
+  --name "$INIT_CONTAINER" \
+  --entrypoint /opt/besu/bin/besu \
   -v "$CONFIG_FILE:/config/qbft-config.json:ro" \
-  -v "$TEMP_DIR:/output" \
   "hyperledger/besu:24.12.0" \
   operator generate-blockchain-config \
     --config-file=/config/qbft-config.json \
-    --to=/output \
+    --to=/besu-output \
     --private-key-file-name=key
+
+# Copy output from container filesystem to host
+docker cp "$INIT_CONTAINER:/besu-output/." "$TEMP_DIR/"
+docker rm "$INIT_CONTAINER"
 
 ok "Besu blockchain config generated"
 
