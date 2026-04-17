@@ -206,12 +206,20 @@ check_prerequisites() {
     if [[ "$CONTEXT" == "local" ]]; then
       warn "curl not found — attempting to install..."
       case "$os" in
-        macos)         brew install curl && success "curl installed" ;;
-        ubuntu|debian) sudo apt-get install -y curl && success "curl installed" ;;
-        *)             error "curl is required. Install it and retry."; exit 1 ;;
+        macos)
+          brew install curl && success "curl installed" || { error "Failed to install curl via brew. Install manually and retry."; exit 1; }
+          ;;
+        ubuntu|debian)
+          sudo apt-get install -y curl && success "curl installed" || { error "Failed to install curl via apt-get. Install manually and retry."; exit 1; }
+          ;;
+        *)
+          error "curl is required. Install it and retry."
+          exit 1
+          ;;
       esac
     else
-      error "curl is required but not installed."; exit 1
+      error "curl is required but not installed."
+      exit 1
     fi
   fi
   success "curl: $(curl --version | head -1 | awk '{print $2}')"
