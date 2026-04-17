@@ -386,8 +386,190 @@ build_images() {
 
   success "Images built successfully"
 }
-start_services()   { : ; }  # implemented in Task 5
-wait_for_stack()   { : ; }  # implemented in Task 5
+start_services() {
+  step "Starting services"
+
+  if $NO_BESU; then
+    warn "Skipping Besu dev chain (--no-besu). Blockchain features run in demo mode."
+    docker compose up -d postgres
+    docker compose up -d backend frontend
+  else
+    docker compose up -d
+  fi
+}
+_elapsed() {
+  echo $(( $(date +%s) - $1 ))
+}
+
+wait_for_stack() {
+  step "Waiting for services to become healthy"
+  local start_time
+  start_time=$(date +%s)
+
+  if ! $NO_BESU; then
+    _wait_besu_nodes    "$start_time" || exit 5
+    _wait_deployer      "$start_time" || exit 6
+  fi
+
+  _wait_service_healthy "postgres" "PostgreSQL"   "3/5" "$start_time" || exit 7
+  _wait_http "backend"  "Backend"  "http://localhost:${BACKEND_PORT}/health" "4/5" "$start_time" || exit 8
+  _wait_http "frontend" "Frontend" "http://localhost:${FRONTEND_PORT}"       "5/5" "$start_time" || exit 9
+}
+
+_wait_besu_nodes() {
+  local start_time="$1"
+  local stage="1/5"
+  local label="[${stage}] Besu QBFT (5 nodes)"
+
+  while true; do
+    local elapsed
+    elapsed=$(_elapsed "$start_time")
+    if [[ $elapsed -ge $TIMEOUT ]]; then
+      echo ""
+      error "${label}: timed out after ${TIMEOUT}s."
+      docker compose logs --tail=20 besu-node1 >&2
+      return 1
+    fi
+
+    local healthy
+    healthy=$(docker compose ps 2>/dev/null | grep -cE "besu-node[0-9].*\(healthy\)" || echo 0)
+
+    local bar="" filled=$(( (healthy * 10) / 5 ))
+    for ((i=0;i<filled;i++)); do bar+="█"; done
+    for ((i=filled;i<10;i++)); do bar+="░"; done
+
+    if [[ "$CONTEXT" == "ci" ]]; then
+      log "${label}: ${healthy}/5 healthy (${elapsed}s)"
+    else
+      printf "\r  %-38s %s  %d/5 (%ds)" "$label" "$bar" "$healthy" "$elapsed"
+    fi
+
+    if [[ "$healthy" -eq 5 ]]; then
+      if [[ "$CONTEXT" == "ci" ]]; then
+        success "${label}: all 5 healthy (${elapsed}s)"
+      else
+        printf "\r  %-38s ✓ all 5 healthy (%ds)\n" "$label" "$elapsed"
+      fi
+      return 0
+    fi
+    sleep 3
+  done
+}
+
+_wait_deployer() {
+  local start_time="$1"
+  local stage="2/5"
+  local label="[${stage}] Contract deployer"
+
+  while true; do
+    local elapsed
+    elapsed=$(_elapsed "$start_time")
+    if [[ $elapsed -ge $TIMEOUT ]]; then
+      echo ""
+      error "${label}: timed out after ${TIMEOUT}s."
+      docker compose logs --tail=20 besu-deployer >&2
+      return 1
+    fi
+
+    local cid
+    cid=$(docker compose ps -q besu-deployer 2>/dev/null | head -1 || true)
+    local state="missing" exit_code="-1"
+    if [[ -n "$cid" ]]; then
+      state=$(docker inspect "$cid" --format '{{.State.Status}}' 2>/dev/null || echo "missing")
+      exit_code=$(docker inspect "$cid" --format '{{.State.ExitCode}}' 2>/dev/null || echo "-1")
+    fi
+
+    if [[ "$CONTEXT" == "ci" ]]; then
+      log "${label}: ${state} (${elapsed}s)"
+    else
+      printf "\r  %-38s ⠸ %s (%ds)" "$label" "$state" "$elapsed"
+    fi
+
+    if [[ "$state" == "exited" ]]; then
+      if [[ "$exit_code" == "0" ]]; then
+        if [[ "$CONTEXT" == "ci" ]]; then
+          success "${label}: completed (${elapsed}s)"
+        else
+          printf "\r  %-38s ✓ completed (%ds)\n" "$label" "$elapsed"
+        fi
+        return 0
+      else
+        echo ""
+        error "${label}: exited with code ${exit_code}."
+        docker compose logs --tail=20 besu-deployer >&2
+        return 1
+      fi
+    fi
+    sleep 3
+  done
+}
+
+_wait_service_healthy() {
+  local service="$1" display="$2" stage="$3" start_time="$4"
+  local label="[${stage}] ${display}"
+
+  while true; do
+    local elapsed
+    elapsed=$(_elapsed "$start_time")
+    if [[ $elapsed -ge $TIMEOUT ]]; then
+      echo ""
+      error "${label}: timed out after ${TIMEOUT}s."
+      docker compose logs --tail=20 "$service" >&2
+      return 1
+    fi
+
+    local healthy
+    healthy=$(docker compose ps 2>/dev/null | grep -cE "${service}.*\(healthy\)" || echo 0)
+
+    if [[ "$CONTEXT" == "ci" ]]; then
+      log "${label}: $(docker compose ps "$service" --format '{{.Status}}' 2>/dev/null || echo waiting) (${elapsed}s)"
+    else
+      printf "\r  %-38s ⠸ waiting (%ds)" "$label" "$elapsed"
+    fi
+
+    if [[ "$healthy" -gt 0 ]]; then
+      if [[ "$CONTEXT" == "ci" ]]; then
+        success "${label}: healthy (${elapsed}s)"
+      else
+        printf "\r  %-38s ✓ healthy (%ds)\n" "$label" "$elapsed"
+      fi
+      return 0
+    fi
+    sleep 3
+  done
+}
+
+_wait_http() {
+  local service="$1" display="$2" url="$3" stage="$4" start_time="$5"
+  local label="[${stage}] ${display}"
+
+  while true; do
+    local elapsed
+    elapsed=$(_elapsed "$start_time")
+    if [[ $elapsed -ge $TIMEOUT ]]; then
+      echo ""
+      error "${label}: did not respond within ${TIMEOUT}s."
+      docker compose logs --tail=20 "$service" >&2
+      return 1
+    fi
+
+    if [[ "$CONTEXT" == "ci" ]]; then
+      log "${label}: checking ${url} (${elapsed}s)"
+    else
+      printf "\r  %-38s ⠸ waiting (%ds)" "$label" "$elapsed"
+    fi
+
+    if curl -sf "$url" &>/dev/null; then
+      if [[ "$CONTEXT" == "ci" ]]; then
+        success "${label}: ready (${elapsed}s)"
+      else
+        printf "\r  %-38s ✓ ready (%ds)\n" "$label" "$elapsed"
+      fi
+      return 0
+    fi
+    sleep 3
+  done
+}
 seed_database()    { : ; }  # implemented in Task 6
 print_summary()    { : ; }  # implemented in Task 6
 
