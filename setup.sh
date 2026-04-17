@@ -73,7 +73,13 @@ while [[ $# -gt 0 ]]; do
     --rollback)   ROLLBACK=true ;;
     --down)       CMD_DOWN=true ;;
     --status)     CMD_STATUS=true ;;
-    --logs)       CMD_LOGS=true; shift; LOGS_SERVICE="${1:-}" ;;
+    --logs)
+      CMD_LOGS=true
+      if [[ $# -gt 1 ]] && [[ "${2:-}" != --* ]] && [[ -n "${2:-}" ]]; then
+        shift
+        LOGS_SERVICE="${1}"
+      fi
+      ;;
     -h|--help)
       sed -n '/^#  Usage:/,/^# ====/p' "$0" | grep -v "^# ====" | sed 's/^#  *//'
       exit 0
@@ -367,20 +373,20 @@ build_images() {
   done
 
   # Build backend and frontend in parallel
-  local build_log
-  build_log=$(mktemp)
+  local build_log_dir
+  build_log_dir=$(mktemp -d)
 
-  docker compose build backend  > "${build_log}.backend"  2>&1 &
+  docker compose build backend  > "${build_log_dir}/backend.log"  2>&1 &
   local pid_backend=$!
-  docker compose build frontend > "${build_log}.frontend" 2>&1 &
+  docker compose build frontend > "${build_log_dir}/frontend.log" 2>&1 &
   local pid_frontend=$!
 
   local failed=false
 
-  wait "$pid_backend"  || { error "Backend build failed:";  cat "${build_log}.backend"  >&2; failed=true; }
-  wait "$pid_frontend" || { error "Frontend build failed:"; cat "${build_log}.frontend" >&2; failed=true; }
+  wait "$pid_backend"  || { error "Backend build failed:";  cat "${build_log_dir}/backend.log"  >&2; failed=true; }
+  wait "$pid_frontend" || { error "Frontend build failed:"; cat "${build_log_dir}/frontend.log" >&2; failed=true; }
 
-  rm -f "${build_log}" "${build_log}.backend" "${build_log}.frontend"
+  rm -rf "${build_log_dir}"
 
   $failed && exit 4
 
