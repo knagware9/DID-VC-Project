@@ -6,3 +6,11 @@ dist/
 *.tsbuildinfo
 coverage/
 
+# Besu generated network artifacts — private keys must never be committed
+besu/network/keys/
+besu/network/genesis.json
+
+# Deployed contract addresses — generated at runtime by besu-deployer
+besu/deployed-addresses.json
+.env.blockchain
+
