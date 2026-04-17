@@ -228,9 +228,10 @@ setup_env() {
   step "Setting up environment"
 
   # Required vars — must be non-empty after .env is loaded
+  # Note: BESU_PRIVATE_KEY is hardcoded in docker-compose.yml for dev;
+  # it is intentionally excluded from .env.example and this validation.
   local required_vars=(
     "DATABASE_URL"
-    "BESU_PRIVATE_KEY"
     "BESU_CHAIN_ID"
   )
 
