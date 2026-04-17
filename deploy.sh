@@ -212,6 +212,20 @@ for svc in backend frontend; do
 done
 
 # =============================================================================
+#  BESU NETWORK INITIALIZATION (if needed)
+# =============================================================================
+
+if ! $NO_BESU; then
+  if [[ ! -s "$SCRIPT_DIR/besu/network/genesis.json" ]]; then
+    step "Initializing Besu QBFT network (first run)"
+    bash "$SCRIPT_DIR/scripts/init-besu-network.sh"
+    success "Besu network initialized"
+  else
+    log "Besu network already initialized — skipping init"
+  fi
+fi
+
+# =============================================================================
 #  BUILD DOCKER IMAGES
 # =============================================================================
 
