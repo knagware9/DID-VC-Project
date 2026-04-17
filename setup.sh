@@ -224,7 +224,106 @@ check_prerequisites() {
   fi
   success "curl: $(curl --version | head -1 | awk '{print $2}')"
 }
-setup_env()           { : ; }  # implemented in Task 3
+setup_env() {
+  step "Setting up environment"
+
+  # Required vars — must be non-empty after .env is loaded
+  local required_vars=(
+    "DATABASE_URL"
+    "BESU_PRIVATE_KEY"
+    "BESU_CHAIN_ID"
+  )
+
+  case "$CONTEXT" in
+
+    # ── CI mode: write env vars from process environment → .env ───────────────
+    ci)
+      if [[ ! -f .env.example ]]; then
+        error ".env.example not found — cannot generate .env in CI mode."
+        exit 2
+      fi
+      : > .env  # truncate/create
+      while IFS= read -r line; do
+        # Skip comments and blank lines
+        [[ "$line" =~ ^#  ]] && continue
+        [[ -z "$line"      ]] && continue
+        local key
+        key=$(echo "$line" | cut -d= -f1)
+        if [[ -n "${!key:-}" ]]; then
+          echo "${key}=${!key}" >> .env
+        else
+          echo "${key}=" >> .env
+        fi
+      done < .env.example
+      success ".env written from environment variables"
+      ;;
+
+    # ── Production mode: .env MUST already exist ──────────────────────────────
+    production)
+      if [[ ! -f .env ]]; then
+        error "Production mode: .env must exist before running setup."
+        error "  Create it manually from .env.example and populate all secrets."
+        exit 2
+      fi
+      success ".env found"
+      ;;
+
+    # ── Local mode: create from .env.example if missing, offer editor ─────────
+    local)
+      if [[ ! -f .env ]]; then
+        if [[ ! -f .env.example ]]; then
+          error ".env.example not found."
+          exit 2
+        fi
+        cp .env.example .env
+        warn ".env created from .env.example"
+        if [[ -n "${EDITOR:-}" ]]; then
+          warn "Opening .env in \$EDITOR (${EDITOR}) — save and exit when done..."
+          "$EDITOR" .env
+        else
+          warn "Review .env now (edit secrets if needed), then press Enter to continue..."
+          read -r
+        fi
+      else
+        success ".env already exists"
+      fi
+      ;;
+
+  esac
+
+  # ── Validate required vars are non-empty ─────────────────────────────────────
+  local missing=()
+  for var in "${required_vars[@]}"; do
+    local val
+    val=$(grep -E "^${var}=" .env 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' || true)
+    [[ -z "$val" ]] && missing+=("$var")
+  done
+
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    error "The following required variables are empty in .env:"
+    for var in "${missing[@]}"; do
+      error "  - $var"
+    done
+    exit 2
+  fi
+
+  # ── Production: warn about default passwords ──────────────────────────────────
+  if [[ "$CONTEXT" == "production" ]] || $PROD_MODE; then
+    if grep -qE "^DATABASE_URL=.*didvc_pass" .env 2>/dev/null; then
+      warn "PRODUCTION: .env still contains the default database password 'didvc_pass'."
+      warn "  Update DATABASE_URL and POSTGRES_PASSWORD before deploying publicly."
+      if [[ "$CONTEXT" != "ci" ]]; then
+        echo -n "  Continue anyway? [y/N] "
+        read -r confirm
+        [[ "$confirm" =~ ^[Yy]$ ]] || { log "Aborted."; exit 1; }
+      fi
+    fi
+  fi
+
+  # ── Load port vars for health checks ─────────────────────────────────────────
+  BACKEND_PORT=$(grep -E '^BACKEND_PORT=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || echo "3001")
+  FRONTEND_PORT=$(grep -E '^FRONTEND_PORT=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || echo "3000")
+}
 init_besu()           { : ; }  # implemented in Task 4
 
 # =============================================================================
