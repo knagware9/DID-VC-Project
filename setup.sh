@@ -472,7 +472,7 @@ _wait_deployer() {
     fi
 
     local cid
-    cid=$(docker compose ps -q besu-deployer 2>/dev/null | head -1 || true)
+    cid=$(docker compose ps -q --all besu-deployer 2>/dev/null | head -1 || true)
     local state="missing" exit_code="-1"
     if [[ -n "$cid" ]]; then
       state=$(docker inspect "$cid" --format '{{.State.Status}}' 2>/dev/null || echo "missing")
