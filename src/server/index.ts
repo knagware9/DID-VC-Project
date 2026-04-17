@@ -2058,9 +2058,10 @@ app.get('/api/besu/network', (req, res) => {
 
 // ─── Besu Explorer Endpoints ──────────────────────────────────────────────────
 
-// Raw JSON-RPC proxy to local chain (uses Node 18+ native fetch)
-async function rpc(method: string, params: any[] = []): Promise<any> {
-  const res = await fetch(process.env.BESU_RPC_URL || 'http://localhost:8545', {
+// Raw JSON-RPC proxy — supports targeting any node URL
+async function rpc(method: string, params: any[] = [], nodeUrl?: string): Promise<any> {
+  const url = nodeUrl || process.env.BESU_RPC_URL || 'http://localhost:8545';
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 }),
@@ -2070,32 +2071,50 @@ async function rpc(method: string, params: any[] = []): Promise<any> {
   return json.result;
 }
 
-// GET /api/besu/explorer/overview — chain summary
+function hex(n: number): string { return '0x' + n.toString(16); }
+
+// Fetch blocks in small batches to avoid overwhelming the RPC
+async function fetchBlocksBatched(indices: number[], withTxns: boolean, batchSize = 20): Promise<any[]> {
+  const results: any[] = [];
+  for (let i = 0; i < indices.length; i += batchSize) {
+    const batch = indices.slice(i, i + batchSize);
+    const batchResults = await Promise.all(
+      batch.map(n => rpc('eth_getBlockByNumber', [hex(n), withTxns]).catch(() => null))
+    );
+    results.push(...batchResults);
+  }
+  return results;
+}
+
+// GET /api/besu/explorer/overview — chain summary (efficient: no full block scan)
 app.get('/api/besu/explorer/overview', async (_req, res) => {
   try {
-    const [blockHex, chainIdHex, gasPrice] = await Promise.all([
+    const [blockHex, chainIdHex] = await Promise.all([
       rpc('eth_blockNumber'),
       rpc('eth_chainId'),
-      rpc('eth_gasPrice'),
     ]);
     const latestBlockNumber = parseInt(blockHex, 16);
     const latestBlock = await rpc('eth_getBlockByNumber', [blockHex, true]);
-    const totalTxns = latestBlock?.transactions?.length || 0;
 
-    // Count transactions across all blocks
-    let totalTransactions = 0;
-    const blockPromises = Array.from({ length: latestBlockNumber + 1 }, (_, i) =>
-      rpc('eth_getBlockByNumber', [hex(i), false])
+    // Count VC transactions from DB (instant, no RPC scan needed)
+    const txCountRow = await query(
+      `SELECT COUNT(*) as cnt FROM credentials WHERE polygon_tx_hash IS NOT NULL`
     );
-    const blocks = await Promise.all(blockPromises);
-    for (const b of blocks) totalTransactions += (b?.transactions?.length || 0);
+    const totalTransactions = parseInt(txCountRow.rows[0].cnt, 10);
+
+    // Peer count and QBFT validators
+    const [peerCountHex, validators] = await Promise.all([
+      rpc('net_peerCount').catch(() => '0x0'),
+      rpc('qbft_getValidatorsByBlockNumber', ['latest']).catch(() => []),
+    ]);
 
     res.json({
       success: true,
       blockNumber: latestBlockNumber,
       chainId: parseInt(chainIdHex, 16),
-      gasPrice: parseInt(gasPrice, 16),
       totalTransactions,
+      peerCount: parseInt(peerCountHex, 16),
+      validatorCount: (validators || []).length,
       didRegistryAddress: process.env.DID_REGISTRY_ADDRESS || null,
       vcRegistryAddress: process.env.VC_REGISTRY_ADDRESS || null,
       rpcUrl: process.env.BESU_RPC_URL || 'http://localhost:8545',
@@ -2106,14 +2125,13 @@ app.get('/api/besu/explorer/overview', async (_req, res) => {
         timestamp: latestBlock?.timestamp ? parseInt(latestBlock.timestamp, 16) : null,
         txCount: latestBlock?.transactions?.length || 0,
         gasUsed: latestBlock?.gasUsed ? parseInt(latestBlock.gasUsed, 16) : 0,
+        miner: latestBlock?.miner || null,
       },
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
-
-function hex(n: number): string { return '0x' + n.toString(16); }
 
 // GET /api/besu/explorer/blocks?page=1&limit=20
 app.get('/api/besu/explorer/blocks', async (req, res) => {
@@ -2216,65 +2234,178 @@ app.get('/api/besu/explorer/tx/:hash', async (req, res) => {
   }
 });
 
-// GET /api/besu/explorer/transactions — all transactions with DB annotations
+// GET /api/besu/explorer/transactions — DB-anchored txns + deploy txns from early blocks
 app.get('/api/besu/explorer/transactions', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-    const latestHex = await rpc('eth_blockNumber');
-    const latest = parseInt(latestHex, 16);
-
-    const allBlocks = await Promise.all(
-      Array.from({ length: latest + 1 }, (_, i) => rpc('eth_getBlockByNumber', [hex(i), true]))
-    );
-
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 200);
     const DID_ADDR = (process.env.DID_REGISTRY_ADDRESS || '').toLowerCase();
     const VC_ADDR  = (process.env.VC_REGISTRY_ADDRESS  || '').toLowerCase();
 
-    // Flatten all transactions, newest first
-    const txns: any[] = [];
-    for (const block of allBlocks.reverse()) {
-      if (!block) continue;
-      const ts = parseInt(block.timestamp, 16);
-      const bn = parseInt(block.number, 16);
-      for (const tx of (block.transactions || [])) {
+    // ── 1. Pull all anchored credential txns from DB (fast, no RPC scan) ──
+    const credRows = await query(
+      `SELECT c.polygon_tx_hash as hash, c.credential_type, c.issued_at,
+              c.polygon_block_number as block_number, c.polygon_anchored_at,
+              hd.did_string as holder_did, u.name as holder_name,
+              id2.did_string as issuer_did
+       FROM credentials c
+       LEFT JOIN dids hd  ON hd.id  = c.holder_did_id
+       LEFT JOIN dids id2 ON id2.id = c.issuer_did_id
+       LEFT JOIN users u  ON u.id   = hd.user_id
+       WHERE c.polygon_tx_hash IS NOT NULL
+       ORDER BY c.issued_at DESC
+       LIMIT $1`, [limit]
+    );
+
+    // Enrich with on-chain data (batch, no more than 20 at a time)
+    const credTxns = await Promise.all(
+      credRows.rows.map(async (row: any) => {
+        try {
+          const tx = await rpc('eth_getTransactionByHash', [row.hash]);
+          const bn = tx ? parseInt(tx.blockNumber || '0', 16) : (row.block_number || 0);
+          const block = tx ? await rpc('eth_getBlockByNumber', [hex(bn), false]) : null;
+          return {
+            hash: row.hash,
+            blockNumber: bn,
+            timestamp: block ? parseInt(block.timestamp, 16) : Math.floor(new Date(row.polygon_anchored_at || row.issued_at).getTime() / 1000),
+            from: tx?.from || '—',
+            to: tx?.to || VC_ADDR,
+            gas: tx ? parseInt(tx.gas || '0', 16) : 0,
+            contract: 'VC Registry',
+            type: 'VC',
+            credential: {
+              credential_type: row.credential_type,
+              issued_at: row.issued_at,
+              holder_did: row.holder_did,
+              holder_name: row.holder_name,
+              issuer_did: row.issuer_did,
+            },
+          };
+        } catch {
+          return {
+            hash: row.hash,
+            blockNumber: row.block_number || 0,
+            timestamp: Math.floor(new Date(row.issued_at).getTime() / 1000),
+            from: '—', to: VC_ADDR, gas: 0,
+            contract: 'VC Registry', type: 'VC',
+            credential: { credential_type: row.credential_type, issued_at: row.issued_at, holder_did: row.holder_did, holder_name: row.holder_name },
+          };
+        }
+      })
+    );
+
+    // ── 2. Scan recent 150 blocks for deploy/transfer transactions ──
+    // Deploy txns happen when besu-deployer runs (at chain startup, not block 0).
+    const latestHex = await rpc('eth_blockNumber');
+    const latest = parseInt(latestHex, 16);
+    const scanCount = Math.min(150, latest + 1);
+    const scanFrom = Math.max(0, latest - scanCount + 1);
+    const earlyBlocks = await fetchBlocksBatched(
+      Array.from({ length: scanCount }, (_, i) => scanFrom + i), true
+    );
+
+    const deployTxns: any[] = [];
+    for (const b of earlyBlocks) {
+      if (!b || !b.transactions?.length) continue;
+      const ts = parseInt(b.timestamp, 16);
+      const bn = parseInt(b.number, 16);
+      for (const tx of b.transactions) {
         const toAddr = (tx.to || '').toLowerCase();
-        txns.push({
-          hash: tx.hash,
-          blockNumber: bn,
-          timestamp: ts,
-          from: tx.from,
-          to: tx.to,
-          gas: parseInt(tx.gas || '0', 16),
-          contract: !tx.to ? '(deploy)' :
-            toAddr === DID_ADDR ? 'DID Registry' :
-            toAddr === VC_ADDR  ? 'VC Registry'  : tx.to,
-          type: !tx.to ? 'deploy' : toAddr === DID_ADDR ? 'DID' : toAddr === VC_ADDR ? 'VC' : 'transfer',
-        });
+        const isKnownRegistry = toAddr === DID_ADDR || toAddr === VC_ADDR;
+        const isDeploy = !tx.to;
+        if (isDeploy || !isKnownRegistry) {
+          deployTxns.push({
+            hash: tx.hash,
+            blockNumber: bn,
+            timestamp: ts,
+            from: tx.from,
+            to: tx.to,
+            gas: parseInt(tx.gas || '0', 16),
+            contract: isDeploy ? '(contract deploy)' :
+              toAddr === DID_ADDR ? 'DID Registry' :
+              toAddr === VC_ADDR  ? 'VC Registry'  : tx.to,
+            type: isDeploy ? 'deploy' :
+              toAddr === DID_ADDR ? 'DID' :
+              toAddr === VC_ADDR  ? 'VC' : 'transfer',
+            credential: null,
+          });
+        }
       }
-      if (txns.length >= limit) break;
     }
 
-    // Annotate with DB credential info
-    const txHashes = txns.filter(t => t.type === 'VC').map(t => t.hash);
-    let credMap: Record<string, any> = {};
-    if (txHashes.length > 0) {
-      const credRows = await query(
-        `SELECT c.polygon_tx_hash, c.credential_type, c.issued_at,
-                hd.did_string as holder_did, u.name as holder_name
-         FROM credentials c
-         LEFT JOIN dids hd ON hd.id = c.holder_did_id
-         LEFT JOIN users u ON u.id = hd.user_id
-         WHERE c.polygon_tx_hash = ANY($1)`, [txHashes]
-      );
-      for (const r of credRows.rows) credMap[r.polygon_tx_hash] = r;
-    }
+    // ── 3. Merge: deploy txns first (oldest), then VC txns (newest first) ──
+    // Remove any deploy-block VC txns already in credTxns to avoid dupes
+    const credHashes = new Set(credTxns.map((t: any) => t.hash));
+    const uniqueDeploys = deployTxns.filter(t => !credHashes.has(t.hash));
 
-    const annotated = txns.slice(0, limit).map(t => ({
-      ...t,
-      credential: credMap[t.hash] || null,
-    }));
+    const allTxns = [...uniqueDeploys, ...credTxns];
 
-    res.json({ success: true, transactions: annotated, total: txns.length });
+    res.json({ success: true, transactions: allTxns.slice(0, limit), total: allTxns.length });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/besu/explorer/nodes — QBFT validator nodes status
+app.get('/api/besu/explorer/nodes', async (_req, res) => {
+  try {
+    const baseRpc = process.env.BESU_RPC_URL || 'http://besu-node1:8545';
+
+    const [latestHex, validators, peerCountHex] = await Promise.all([
+      rpc('eth_blockNumber'),
+      rpc('qbft_getValidatorsByBlockNumber', ['latest']).catch(() => []),
+      rpc('net_peerCount').catch(() => '0x0'),
+    ]);
+    const latestBlock = parseInt(latestHex, 16);
+
+    // Query each node's block number individually (in parallel, small set)
+    const NODE_COUNT = 5;
+    const nodeStatuses = await Promise.all(
+      Array.from({ length: NODE_COUNT }, async (_, i) => {
+        const nodeNum = i + 1;
+        const nodeUrl = baseRpc.replace(/besu-node\d+/, `besu-node${nodeNum}`);
+        try {
+          const [nodeBlockHex, nodePeerHex] = await Promise.all([
+            rpc('eth_blockNumber', [], nodeUrl),
+            rpc('net_peerCount',   [], nodeUrl).catch(() => '0x0'),
+          ]);
+          const nodeBlock = parseInt(nodeBlockHex, 16);
+          const validatorAddr = (validators || [])[i] || null;
+          return {
+            id: nodeNum,
+            name: `besu-node${nodeNum}`,
+            url: nodeUrl,
+            blockNumber: nodeBlock,
+            peerCount: parseInt(nodePeerHex, 16),
+            synced: Math.abs(nodeBlock - latestBlock) <= 2,
+            validatorAddress: validatorAddr,
+            isValidator: !!(validatorAddr),
+            status: 'online',
+          };
+        } catch {
+          return {
+            id: nodeNum,
+            name: `besu-node${nodeNum}`,
+            url: nodeUrl,
+            blockNumber: null,
+            peerCount: 0,
+            synced: false,
+            validatorAddress: (validators || [])[i] || null,
+            isValidator: true,
+            status: 'offline',
+          };
+        }
+      })
+    );
+
+    res.json({
+      success: true,
+      network: process.env.BESU_NETWORK || 'dev',
+      chainId: 1337,
+      latestBlock,
+      totalPeers: parseInt(peerCountHex, 16),
+      validatorCount: (validators || []).length,
+      nodes: nodeStatuses,
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

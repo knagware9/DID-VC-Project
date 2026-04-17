@@ -3,9 +3,23 @@ import { useAuth } from '../contexts/AuthContext';
 
 type Overview = {
   blockNumber: number; chainId: number; totalTransactions: number;
+  peerCount: number; validatorCount: number;
   didRegistryAddress: string; vcRegistryAddress: string;
   rpcUrl: string; network: string;
-  latestBlock: { number: number; hash: string; timestamp: number; txCount: number; gasUsed: number };
+  latestBlock: { number: number; hash: string; timestamp: number; txCount: number; gasUsed: number; miner: string };
+};
+
+type NodeStatus = {
+  id: number; name: string; url: string;
+  blockNumber: number | null; peerCount: number;
+  synced: boolean; validatorAddress: string | null;
+  isValidator: boolean; status: 'online' | 'offline';
+};
+
+type NodesData = {
+  network: string; chainId: number; latestBlock: number;
+  totalPeers: number; validatorCount: number;
+  nodes: NodeStatus[];
 };
 
 type TxSummary = {
@@ -58,10 +72,11 @@ function timeAgo(ts: number) {
 
 export default function BesuExplorerPage() {
   const { token } = useAuth();
-  const [view, setView] = useState<'overview' | 'blocks' | 'transactions' | 'tx'>('overview');
+  const [view, setView] = useState<'overview' | 'blocks' | 'transactions' | 'nodes' | 'tx'>('overview');
   const [overview, setOverview] = useState<Overview | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [transactions, setTransactions] = useState<TxSummary[]>([]);
+  const [nodesData, setNodesData] = useState<NodesData | null>(null);
   const [selectedTx, setSelectedTx] = useState<TxDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -110,11 +125,23 @@ export default function BesuExplorerPage() {
     finally { setLoading(false); }
   };
 
+  const loadNodes = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/besu/explorer/nodes', { headers });
+      const d = await r.json();
+      if (d.success) setNodesData(d);
+      else setError(d.error || 'Failed to load nodes');
+    } catch (e: any) { setError(e.message); }
+    finally { setLoading(false); }
+  }, []);
+
   useEffect(() => { loadOverview(); }, []);
 
   useEffect(() => {
     if (view === 'blocks') loadBlocks(blockPage);
     else if (view === 'transactions') loadTransactions();
+    else if (view === 'nodes') loadNodes();
   }, [view, blockPage]);
 
   useEffect(() => {
@@ -157,12 +184,14 @@ export default function BesuExplorerPage() {
 
       {/* ── Status Cards ── */}
       {overview && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
           {[
             { icon: '🟢', label: 'Status', value: 'Live', sub: overview.network.toUpperCase(), color: '#16a34a' },
             { icon: '📦', label: 'Latest Block', value: `#${overview.blockNumber}`, sub: `${overview.latestBlock.txCount} txns`, color: '#1d4ed8' },
-            { icon: '📋', label: 'Transactions', value: overview.totalTransactions, sub: 'on-chain', color: '#7c3aed' },
-            { icon: '⛽', label: 'Gas Used (latest)', value: overview.latestBlock.gasUsed.toLocaleString(), sub: 'units', color: '#ea580c' },
+            { icon: '📋', label: 'VC Transactions', value: overview.totalTransactions, sub: 'anchored on-chain', color: '#7c3aed' },
+            { icon: '🖥', label: 'Validator Nodes', value: overview.validatorCount, sub: 'QBFT consensus', color: '#0891b2' },
+            { icon: '🔗', label: 'Connected Peers', value: overview.peerCount, sub: 'p2p connections', color: '#059669' },
+            { icon: '⛽', label: 'Gas Used', value: overview.latestBlock.gasUsed.toLocaleString(), sub: 'latest block', color: '#ea580c' },
           ].map(s => (
             <div key={s.label} style={{ background: '#fff', borderRadius: 10, padding: '1rem 1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.07)', borderTop: `3px solid ${s.color}` }}>
               <div style={{ fontSize: '1.3rem', marginBottom: '0.25rem' }}>{s.icon}</div>
@@ -195,10 +224,15 @@ export default function BesuExplorerPage() {
 
       {/* ── Nav Tabs ── */}
       <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.25rem', background: '#fff', borderRadius: 10, padding: '0.35rem', boxShadow: '0 1px 4px rgba(0,0,0,0.07)', width: 'fit-content' }}>
-        {(['overview', 'blocks', 'transactions'] as const).map(tab => (
-          <button key={tab} onClick={() => setView(tab)}
-            style={{ padding: '0.5rem 1.25rem', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', background: view === tab ? '#1a56db' : 'transparent', color: view === tab ? '#fff' : '#64748b', transition: 'all 0.15s' }}>
-            {tab === 'overview' ? '🏠 Overview' : tab === 'blocks' ? '📦 Blocks' : '📋 Transactions'}
+        {([
+          { id: 'overview',      label: '🏠 Overview' },
+          { id: 'nodes',         label: '🖥 Nodes' },
+          { id: 'blocks',        label: '📦 Blocks' },
+          { id: 'transactions',  label: '📋 Transactions' },
+        ] as const).map(tab => (
+          <button key={tab.id} onClick={() => setView(tab.id)}
+            style={{ padding: '0.5rem 1.25rem', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', background: view === tab.id ? '#1a56db' : 'transparent', color: view === tab.id ? '#fff' : '#64748b', transition: 'all 0.15s' }}>
+            {tab.label}
           </button>
         ))}
         {view === 'tx' && (
@@ -372,6 +406,101 @@ export default function BesuExplorerPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Nodes Tab ── */}
+      {view === 'nodes' && (
+        <div>
+          {loading ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Loading nodes…</div>
+          ) : nodesData ? (
+            <>
+              {/* Summary bar */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '1rem', marginBottom: '1.25rem' }}>
+                {[
+                  { icon: '⛓️', label: 'Network', value: `${nodesData.network.toUpperCase()} (Chain ${nodesData.chainId})`, color: '#1d4ed8' },
+                  { icon: '🖥', label: 'Validator Nodes', value: `${nodesData.nodes.filter(n => n.status === 'online').length} / ${nodesData.nodes.length} online`, color: '#16a34a' },
+                  { icon: '🔗', label: 'P2P Peers', value: `${nodesData.totalPeers} connections`, color: '#7c3aed' },
+                ].map(s => (
+                  <div key={s.label} style={{ background: '#fff', borderRadius: 10, padding: '1rem 1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.07)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <span style={{ fontSize: '1.8rem' }}>{s.icon}</span>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '1rem', color: s.color }}>{s.value}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{s.label}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Node cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1rem' }}>
+                {nodesData.nodes.map(node => {
+                  const isOnline  = node.status === 'online';
+                  const isSynced  = node.synced;
+                  const isMiner   = nodesData.latestBlock === node.blockNumber;
+                  return (
+                    <div key={node.id} style={{
+                      background: '#fff', borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.07)',
+                      border: `2px solid ${isOnline ? (isSynced ? '#bbf7d0' : '#fde68a') : '#fecaca'}`,
+                      overflow: 'hidden',
+                    }}>
+                      {/* Card header */}
+                      <div style={{
+                        background: isOnline ? (isSynced ? '#f0fdf4' : '#fffbeb') : '#fef2f2',
+                        padding: '0.85rem 1.1rem',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        borderBottom: `1px solid ${isOnline ? (isSynced ? '#bbf7d0' : '#fde68a') : '#fecaca'}`,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                          <span style={{ fontSize: '1.4rem' }}>🖥</span>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>{node.name}</div>
+                            <div style={{ fontSize: '0.7rem', color: '#64748b' }}>QBFT Validator · Node {node.id}</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          <span style={{ background: isOnline ? '#dcfce7' : '#fee2e2', color: isOnline ? '#15803d' : '#dc2626', padding: '0.2rem 0.55rem', borderRadius: 12, fontSize: '0.7rem', fontWeight: 700 }}>
+                            {isOnline ? '● Online' : '○ Offline'}
+                          </span>
+                          {isSynced && isOnline && <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '0.2rem 0.55rem', borderRadius: 12, fontSize: '0.7rem', fontWeight: 700 }}>✓ Synced</span>}
+                          {isMiner && isOnline && <span style={{ background: '#fef3c7', color: '#92400e', padding: '0.2rem 0.55rem', borderRadius: 12, fontSize: '0.7rem', fontWeight: 700 }}>⛏ Miner</span>}
+                        </div>
+                      </div>
+
+                      {/* Card body */}
+                      <div style={{ padding: '0.85rem 1.1rem' }}>
+                        {[
+                          ['Block Height', node.blockNumber !== null ? `#${node.blockNumber.toLocaleString()}` : '—'],
+                          ['Peers', node.peerCount],
+                          ['Validator Address', node.validatorAddress ? `${node.validatorAddress.slice(0,10)}…${node.validatorAddress.slice(-6)}` : '—'],
+                          ['Role', node.isValidator ? '✅ QBFT Validator' : 'Observer'],
+                        ].map(([k, v]) => (
+                          <div key={k as string} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid #f1f5f9', fontSize: '0.83rem' }}>
+                            <span style={{ color: '#64748b' }}>{k}</span>
+                            <span style={{ fontWeight: 600, color: '#1e293b', fontFamily: k === 'Validator Address' ? 'monospace' : 'inherit' }}>{v as string}</span>
+                          </div>
+                        ))}
+                        {node.validatorAddress && (
+                          <div style={{ marginTop: '0.6rem' }}>
+                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '0.2rem' }}>Full Address</div>
+                            <code style={{ fontSize: '0.68rem', color: '#7c3aed', wordBreak: 'break-all', lineHeight: 1.5 }}>{node.validatorAddress}</code>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div style={{ background: '#fff', borderRadius: 10, padding: '2rem', textAlign: 'center', color: '#94a3b8', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🖥</div>
+              No node data available. Click refresh to load.
+              <br />
+              <button onClick={loadNodes} style={{ marginTop: '1rem', padding: '0.5rem 1.25rem', background: '#1a56db', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Load Nodes</button>
             </div>
           )}
         </div>

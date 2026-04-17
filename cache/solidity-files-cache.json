@@ -1,7 +1,7 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "/Users/kamleshnagware/did-vc-project/src/contracts/DIDRegistry.sol": {
+    "/app/src/contracts/DIDRegistry.sol": {
       "lastModificationDate": 1774600853494,
       "contentHash": "442c039d1c59cd4bf227e5f10c5cc465",
       "sourceName": "src/contracts/DIDRegistry.sol",
@@ -36,7 +36,7 @@
         "DIDRegistry"
       ]
     },
-    "/Users/kamleshnagware/did-vc-project/src/contracts/VCRegistry.sol": {
+    "/app/src/contracts/VCRegistry.sol": {
       "lastModificationDate": 1774600871279,
       "contentHash": "3a764e136d0bb8a4153cba7b8d218b6b",
       "sourceName": "src/contracts/VCRegistry.sol",

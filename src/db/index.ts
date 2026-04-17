@@ -2,6 +2,16 @@
  * PostgreSQL database connection pool
  */
 import pg from 'pg';
+import { config as dotenvConfig } from 'dotenv';
+import { resolve } from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// Load .env from project root so tsx scripts pick up DATABASE_URL
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+dotenvConfig({ path: resolve(__dirname, '../../.env') });
+
 const { Pool } = pg;
 
 const DATABASE_URL = process.env.DATABASE_URL ||
