@@ -1,49 +1,66 @@
 SHELL := /bin/bash
-.PHONY: build up down logs restart ps env deploy deploy-seed deploy-no-besu deploy-prod rollback status
+.PHONY: setup up down logs status seed ci rollback build ps env \
+        deploy deploy-seed deploy-no-besu deploy-prod
 
-# ── Docker Compose primitives ─────────────────────────────────────────────────
+# ── Primary targets ───────────────────────────────────────────────────────────
+
+## First-time setup on a new machine: check prerequisites, create .env, init
+## Besu, build images, start services, wait for health checks.
+setup:
+	./setup.sh
+
+## Day-to-day restart: skip prerequisite / env / Besu-init phase, just deploy.
+up:
+	./setup.sh --skip-setup
+
+## Stop and remove all containers.
+down:
+	./setup.sh --down
+
+## Tail logs for all services (or a specific one: make logs s=backend).
+logs:
+	./setup.sh --logs $(s)
+
+## Print current health status of all services.
+status:
+	./setup.sh --status
+
+## Seed the database with demo data.
+seed:
+	./setup.sh --seed
+
+## Test CI pipeline behaviour locally (plain output, strict env validation).
+ci:
+	CI=true ./setup.sh
+
+## Roll back backend + frontend to the previous Docker images.
+rollback:
+	./setup.sh --rollback
+
+# ── Build helpers ─────────────────────────────────────────────────────────────
+
+## Rebuild Docker images only (no startup).
 build:
 	docker compose build
 
-up:
-	docker compose up -d
-
-down:
-	docker compose down
-
-logs:
-	docker compose logs -f
-
-restart: down up
-
+## Show running container list.
 ps:
 	docker compose ps
 
+## Create .env from .env.example if it does not exist.
 env:
 	@if [ ! -f .env ]; then cp .env.example .env && echo ".env created from .env.example"; else echo ".env already exists"; fi
 
-# ── Deploy targets (via deploy.sh) ────────────────────────────────────────────
+# ── Legacy aliases (kept for muscle memory) ───────────────────────────────────
 
-## Full deploy: build images, start services, health-check
 deploy:
-	./deploy.sh
+	./setup.sh
 
-## Deploy + seed the database with demo data
 deploy-seed:
-	./deploy.sh --seed
+	./setup.sh --seed
 
-## Deploy without the local Besu dev chain (demo/blockchain-less mode)
 deploy-no-besu:
-	./deploy.sh --no-besu
+	./setup.sh --no-besu
 
-## Production deploy (warns on default passwords, no auto-seed)
 deploy-prod:
-	./deploy.sh --prod
-
-## Roll back backend + frontend to the previous Docker images
-rollback:
-	./deploy.sh --rollback
-
-## Show running service status
-status:
-	./deploy.sh --status
+	./setup.sh --prod
