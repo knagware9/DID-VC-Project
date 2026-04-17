@@ -78,17 +78,21 @@ function VPDraftForm({ token, walletVCs, onSubmit }: { token: string | null; wal
   );
 }
 
-function ProofRequestsTab({ proofRequests, myCredentials, corporateCredentials, token, onRefresh }: {
+function ProofRequestsTab({ proofRequests, myCredentials, corporateCredentials, token, onRefresh, isEmployee }: {
   proofRequests: any[];
   myCredentials: any[];
   corporateCredentials: any[];
   token: string | null;
   onRefresh: () => void;
+  isEmployee?: boolean;
 }) {
   const [expanded, setExpanded] = React.useState<string | null>(null);
   const [selected, setSelected] = React.useState<Record<string, string[]>>({});
   const [submitting, setSubmitting] = React.useState<string | null>(null);
   const [msg, setMsg] = React.useState<{ id: string; type: 'success' | 'error'; text: string } | null>(null);
+  const [peerMode, setPeerMode] = React.useState<string | null>(null); // reqId when peer mode is active
+  const [peerEmail, setPeerEmail] = React.useState('');
+  const [peerNote, setPeerNote] = React.useState('');
 
   function toggleCred(reqId: string, credId: string) {
     setSelected(s => {
@@ -111,6 +115,43 @@ function ProofRequestsTab({ proofRequests, myCredentials, corporateCredentials, 
       if (!r.ok) throw new Error(d.error);
       setMsg({ id: reqId, type: 'success', text: '✓ Credentials shared successfully' });
       setExpanded(null);
+      onRefresh();
+    } catch (err: any) {
+      setMsg({ id: reqId, type: 'error', text: err.message });
+    } finally {
+      setSubmitting(null);
+    }
+  }
+
+  async function handleShareToPeer(reqId: string) {
+    const credIds = selected[reqId] || [];
+    if (credIds.length === 0) { setMsg({ id: reqId, type: 'error', text: 'Select at least one credential' }); return; }
+    if (!peerEmail.trim()) { setMsg({ id: reqId, type: 'error', text: 'Enter peer email to share with' }); return; }
+    setSubmitting(reqId);
+    try {
+      // Step 1: compose VP as draft (no verifierRequestId)
+      const composeR = await fetch('/api/presentations/compose', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credentialIds: credIds }),
+      });
+      const composeD = await composeR.json();
+      if (!composeR.ok) throw new Error(composeD.error);
+
+      // Step 2: share to peer and link to the verifier request
+      const shareR = await fetch(`/api/presentations/${composeD.presentationId}/share-to-peer`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ peerEmail: peerEmail.trim(), note: peerNote.trim() || null, verifierRequestId: reqId }),
+      });
+      const shareD = await shareR.json();
+      if (!shareR.ok) throw new Error(shareD.error);
+
+      setMsg({ id: reqId, type: 'success', text: `✓ VP sent to ${peerEmail} for peer review` });
+      setExpanded(null);
+      setPeerMode(null);
+      setPeerEmail('');
+      setPeerNote('');
       onRefresh();
     } catch (err: any) {
       setMsg({ id: reqId, type: 'error', text: err.message });
@@ -238,13 +279,54 @@ function ProofRequestsTab({ proofRequests, myCredentials, corporateCredentials, 
                     {reqMsg && (
                       <div style={{ marginBottom: '0.5rem', fontSize: '0.875rem', color: reqMsg.type === 'success' ? '#276749' : '#dc3545' }}>{reqMsg.text}</div>
                     )}
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => handleSubmitVP(r.id)}
-                      disabled={submitting === r.id}
-                    >
-                      {submitting === r.id ? 'Submitting...' : 'Submit Presentation'}
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => handleSubmitVP(r.id)}
+                        disabled={submitting === r.id}
+                      >
+                        {submitting === r.id ? 'Submitting...' : 'Submit to Verifier'}
+                      </button>
+                      {isEmployee && (
+                        <button
+                          className="btn btn-secondary"
+                          style={{ fontSize: '0.85rem' }}
+                          onClick={() => setPeerMode(peerMode === r.id ? null : r.id)}
+                          disabled={submitting === r.id}
+                        >
+                          🔍 Share to Peer for Review
+                        </button>
+                      )}
+                    </div>
+                    {isEmployee && peerMode === r.id && (
+                      <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#f0f9ff', borderRadius: 8, border: '1px solid #bae6fd' }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.5rem', color: '#0369a1' }}>
+                          🔍 Peer Review — share to colleague for internal approval
+                        </div>
+                        <input
+                          className="form-input"
+                          placeholder="Peer employee email (same org)"
+                          value={peerEmail}
+                          onChange={e => setPeerEmail(e.target.value)}
+                          style={{ marginBottom: '0.4rem', fontSize: '0.85rem' }}
+                        />
+                        <input
+                          className="form-input"
+                          placeholder="Note (optional)"
+                          value={peerNote}
+                          onChange={e => setPeerNote(e.target.value)}
+                          style={{ marginBottom: '0.5rem', fontSize: '0.85rem' }}
+                        />
+                        <button
+                          className="btn btn-primary"
+                          style={{ fontSize: '0.85rem' }}
+                          onClick={() => handleShareToPeer(r.id)}
+                          disabled={submitting === r.id}
+                        >
+                          {submitting === r.id ? 'Sending...' : 'Send for Peer Review'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -296,6 +378,8 @@ export default function CorporateDashboard() {
   const [inviteMsg, setInviteMsg] = useState('');
   const [corpQueue, setCorpQueue] = useState<any[]>([]);
   const [didQueue, setDidQueue] = useState<any[]>([]);
+  const [vpReviewQueue, setVpReviewQueue] = useState<any[]>([]);
+  const [sharePeerTarget, setSharePeerTarget] = useState<{ presentationId: string; email: string; note: string } | null>(null);
   const [myDidRequests, setMyDidRequests] = useState<any[]>([]);
   const [didIssuers, setDidIssuers] = useState<any[]>([]);
   const [didReqForm, setDidReqForm] = useState({
@@ -402,6 +486,10 @@ export default function CorporateDashboard() {
         ]);
         setRequests(vcData.requests || []);
         setMyDidRequests(didData.requests || []);
+      } else if (tab === 'vp-review') {
+        const r = await fetch('/api/employee/vp-pending-review', { headers: { Authorization: `Bearer ${token}` } });
+        const d = await r.json();
+        setVpReviewQueue(d.presentations || []);
       }
     } catch (e: any) { showMsg('error', e.message); }
     finally { setLoading(false); }
@@ -1110,6 +1198,7 @@ return (
               corporateCredentials={corpWalletCredentials}
               token={token}
               onRefresh={loadAll}
+              isEmployee={subRole === 'employee'}
             />
           )}
 
@@ -1635,6 +1724,113 @@ return (
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* VP Review Tab — Employee 2 reviews VPs shared by colleague */}
+          {tab === 'vp-review' && (
+            <div>
+              <h3 style={{ marginBottom: '0.25rem' }}>VP Peer Review Queue</h3>
+              <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+                Presentations shared to you by a colleague for internal approval before submission to the verifier.
+              </p>
+              {vpReviewQueue.length === 0 ? (
+                <div className="card" style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>
+                  No presentations pending your review.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: 700 }}>
+                  {vpReviewQueue.map((pres: any) => {
+                    const vp = typeof pres.vp_json === 'string' ? JSON.parse(pres.vp_json) : pres.vp_json;
+                    const vcs: any[] = vp?.verifiableCredential || [];
+                    return (
+                      <div key={pres.id} className="card" style={{ padding: '1.25rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                          <div>
+                            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                              VP from {pres.sender_name || pres.sender_email}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                              {new Date(pres.created_at).toLocaleString()}
+                            </div>
+                            {pres.reviewer_note && (
+                              <div style={{ fontSize: '0.85rem', color: '#555', marginTop: 4, fontStyle: 'italic' }}>
+                                Note: {pres.reviewer_note}
+                              </div>
+                            )}
+                            {pres.required_credential_types && (
+                              <div style={{ fontSize: '0.8rem', color: '#555', marginTop: 4 }}>
+                                Verifier requires: <strong>{(pres.required_credential_types || []).join(', ')}</strong>
+                              </div>
+                            )}
+                          </div>
+                          <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: '0.75rem', background: '#fef9c3', color: '#854d0e', whiteSpace: 'nowrap' }}>
+                            Pending Review
+                          </span>
+                        </div>
+
+                        {/* Credentials inside the VP */}
+                        <div style={{ background: '#f8fafc', borderRadius: 8, padding: '0.75rem', marginBottom: '0.75rem' }}>
+                          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: '0.4rem' }}>
+                            Credentials in this VP ({vcs.length})
+                          </div>
+                          {vcs.map((vc: any, i: number) => (
+                            <div key={i} style={{ fontSize: '0.8rem', padding: '4px 0', borderBottom: i < vcs.length - 1 ? '1px solid #e2e8f0' : 'none' }}>
+                              <strong>{vc.type?.find((t: string) => t !== 'VerifiableCredential') || vc.type?.[0]}</strong>
+                              {vc.credentialSubject && (
+                                <span style={{ color: '#64748b', marginLeft: 8 }}>
+                                  — {Object.entries(vc.credentialSubject)
+                                    .filter(([k]) => k !== 'id')
+                                    .slice(0, 2)
+                                    .map(([k, v]) => `${k}: ${v}`)
+                                    .join(', ')}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            className="btn btn-primary"
+                            style={{ fontSize: '0.85rem' }}
+                            onClick={async () => {
+                              const r = await fetch(`/api/presentations/${pres.id}/peer-approve`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ decision: 'approve' }),
+                              });
+                              const d = await r.json();
+                              if (r.ok) { showMsg('success', '✓ VP approved and submitted to verifier'); loadAll(); }
+                              else showMsg('error', d.error);
+                            }}
+                          >
+                            ✓ Approve &amp; Submit to Verifier
+                          </button>
+                          <button
+                            className="btn btn-secondary"
+                            style={{ fontSize: '0.85rem', color: '#dc3545' }}
+                            onClick={async () => {
+                              const note = window.prompt('Rejection reason (optional):');
+                              if (note === null) return;
+                              const r = await fetch(`/api/presentations/${pres.id}/peer-approve`, {
+                                method: 'POST',
+                                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ decision: 'reject', note }),
+                              });
+                              const d = await r.json();
+                              if (r.ok) { showMsg('success', 'VP rejected — colleague can recompose'); loadAll(); }
+                              else showMsg('error', d.error);
+                            }}
+                          >
+                            ✗ Reject
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

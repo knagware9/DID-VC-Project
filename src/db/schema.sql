@@ -100,6 +100,11 @@ CREATE TABLE IF NOT EXISTS credential_shares (
 
 ALTER TABLE presentations ADD COLUMN IF NOT EXISTS direct_share_verifier_did VARCHAR(255);
 ALTER TABLE presentations ADD COLUMN IF NOT EXISTS share_purpose VARCHAR(500);
+ALTER TABLE presentations ADD COLUMN IF NOT EXISTS shared_to_user_id UUID REFERENCES users(id);
+ALTER TABLE presentations ADD COLUMN IF NOT EXISTS internal_status VARCHAR(30) DEFAULT 'draft';
+ALTER TABLE presentations ADD COLUMN IF NOT EXISTS reviewed_by_user_id UUID REFERENCES users(id);
+ALTER TABLE presentations ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+ALTER TABLE presentations ADD COLUMN IF NOT EXISTS reviewer_note TEXT;
 
 DO $$ BEGIN
   IF NOT EXISTS (

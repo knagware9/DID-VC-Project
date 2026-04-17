@@ -481,7 +481,15 @@
       "Bash(PGPASSWORD=didvc_pass psql -h localhost -p 5433 -U didvc_user -d didvc -t -c \"SELECT token FROM sessions LIMIT 1;\")",
       "Bash(curl -s 'http://localhost:3001/api/besu/explorer/transactions?limit=200' -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
       "Bash(curl -s -X POST http://localhost:3001/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"portal@test.com\",\"password\":\"Platform@123\"}')",
-      "Bash(curl -s -X POST http://localhost:3001/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"portal@test.com\",\"password\":\"Platform@123\"}')"
+      "Bash(curl -s -X POST http://localhost:3001/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"portal@test.com\",\"password\":\"Platform@123\"}')",
+      "Bash(curl -s http://localhost:3001/api/besu/status)",
+      "Bash(curl -s -X POST http://localhost:3001/api/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"vikram.singh@xyz.co.in\",\"password\":\"Platform@123\"}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('token:', d.get\\('token',''\\)[:30], '...'\\); print\\('user:', json.dumps\\(d.get\\('user',{}\\), indent=2\\)[:500]\\)\")",
+      "Bash(psql postgresql://didvc_user:didvc_pass@localhost:5433/didvc -c \"SELECT c.credential_type, c.revoked FROM credentials c JOIN dids d ON c.holder_did_id = d.id WHERE d.did_string = 'did:web:didvc.platform:xyz-emp-vikram-singh';\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Server up, block:', d.get\\('blockNumber'\\)\\)\")",
+      "Bash(grep -n \"getEmployees\\\\|api/holder/employees\\\\|corporate/employees$\\\\|employees'\" /Users/kamleshnagware/did-vc-project/src/server/index.ts)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('DID:', d.get\\('user',{}\\).get\\('did'\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Ready, block:', d['blockNumber']\\)\")"
     ]
   }
 }

@@ -241,11 +241,21 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
 
 app.get('/api/auth/me', requireAuth, async (req, res) => {
   const user = (req as any).user;
-  const didResult = await query(
-    "SELECT did_string FROM dids WHERE user_id = $1 AND did_type = 'parent' LIMIT 1",
-    [orgDIDOwner(user)]
-  );
-  const did = didResult.rows[0]?.did_string;
+  let did: string | undefined;
+  if ((user as any).sub_role === 'employee') {
+    // Employees have a sub-DID stored in employee_registry → dids
+    const subDidResult = await query(
+      `SELECT d.did_string FROM employee_registry er JOIN dids d ON er.sub_did_id = d.id WHERE er.user_id = $1 LIMIT 1`,
+      [user.id]
+    );
+    did = subDidResult.rows[0]?.did_string;
+  } else {
+    const didResult = await query(
+      "SELECT did_string FROM dids WHERE user_id = $1 AND did_type = 'parent' LIMIT 1",
+      [orgDIDOwner(user)]
+    );
+    did = didResult.rows[0]?.did_string;
+  }
   res.json({
     success: true,
     user: { id: user.id, email: user.email, role: user.role, did, name: user.name, authority_type: (user as any).authority_type || null, sub_role: (user as any).sub_role || null, org_id: (user as any).org_id || null },
@@ -4577,6 +4587,153 @@ app.get('/api/holder/transactions', requireAuth, requireRole('corporate'), async
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     res.json({ success: true, transactions: all });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Employee Peer VP Review Endpoints ───────────────────────────────────────
+
+// GET /api/employee/vp-pending-review — Employee 2 sees VPs shared to them for peer review
+app.get('/api/employee/vp-pending-review', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const result = await query(
+      `SELECT p.id, p.vp_json, p.internal_status, p.created_at, p.reviewer_note,
+              p.verifier_request_id,
+              sender.name AS sender_name, sender.email AS sender_email,
+              vr.required_credential_types, vr.status AS vr_status
+       FROM presentations p
+       JOIN dids d ON p.holder_did_id = d.id
+       JOIN users sender ON d.user_id = sender.id
+       LEFT JOIN verification_requests vr ON p.verifier_request_id = vr.id
+       WHERE p.shared_to_user_id = $1
+         AND p.internal_status = 'pending_peer_review'
+       ORDER BY p.created_at DESC`,
+      [user.id]
+    );
+    res.json({ success: true, presentations: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/presentations/:id/share-to-peer — Employee 1 shares a composed VP to Employee 2
+app.post('/api/presentations/:id/share-to-peer', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { id } = req.params;
+    const { peerEmail, note, verifierRequestId } = req.body;
+
+    if (!peerEmail) return res.status(400).json({ error: 'peerEmail is required' });
+
+    // Validate the presentation belongs to this user
+    const presResult = await query(
+      `SELECT p.id, p.holder_did_id, p.verifier_request_id, p.internal_status
+       FROM presentations p
+       JOIN dids d ON p.holder_did_id = d.id
+       WHERE p.id = $1 AND d.user_id = $2`,
+      [id, user.id]
+    );
+    if (presResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Presentation not found or not owned by you' });
+    }
+
+    const pres = presResult.rows[0];
+    if (pres.internal_status !== 'draft' && pres.internal_status !== 'pending_peer_review') {
+      return res.status(400).json({ error: `Presentation is already in status: ${pres.internal_status}` });
+    }
+
+    // Look up peer by email — must be in the same org
+    const peerResult = await query(
+      `SELECT u.id FROM users u WHERE u.email = $1 AND u.org_id = $2 AND u.role = 'corporate'`,
+      [peerEmail, user.org_id]
+    );
+    if (peerResult.rows.length === 0) {
+      return res.status(404).json({ error: `Peer employee not found: ${peerEmail}` });
+    }
+    const peerId = peerResult.rows[0].id;
+
+    // Resolve verifier_request_id: use existing or the one passed in body
+    const vrId = pres.verifier_request_id || verifierRequestId || null;
+
+    // Update presentation: set shared_to_user_id, internal_status, and optionally verifier_request_id
+    await query(
+      `UPDATE presentations
+       SET shared_to_user_id = $1, internal_status = 'pending_peer_review',
+           reviewer_note = $2, verifier_request_id = COALESCE($3, verifier_request_id)
+       WHERE id = $4`,
+      [peerId, note || null, vrId, id]
+    );
+
+    await writeAuditLog('vp_shared_to_peer', null, null, 'VerifiablePresentation');
+
+    res.json({ success: true, message: `VP shared to ${peerEmail} for review` });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/presentations/:id/peer-approve — Employee 2 approves VP and forwards to verifier
+app.post('/api/presentations/:id/peer-approve', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { id } = req.params;
+    const { decision, note } = req.body; // decision: 'approve' | 'reject'
+
+    if (!decision || !['approve', 'reject'].includes(decision)) {
+      return res.status(400).json({ error: "decision must be 'approve' or 'reject'" });
+    }
+
+    // Validate the presentation is shared to this user
+    const presResult = await query(
+      `SELECT p.id, p.verifier_request_id, p.internal_status, p.holder_did_id
+       FROM presentations p
+       WHERE p.id = $1 AND p.shared_to_user_id = $2 AND p.internal_status = 'pending_peer_review'`,
+      [id, user.id]
+    );
+    if (presResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Presentation not found in your review queue' });
+    }
+
+    const pres = presResult.rows[0];
+
+    if (decision === 'reject') {
+      await query(
+        `UPDATE presentations
+         SET internal_status = 'peer_rejected', reviewed_by_user_id = $1, reviewed_at = NOW(), reviewer_note = $2
+         WHERE id = $3`,
+        [user.id, note || null, id]
+      );
+      // If linked to a verification request, revert to pending so Employee 1 can recompose
+      if (pres.verifier_request_id) {
+        await query(
+          `UPDATE verification_requests SET status = 'pending', presentation_id = NULL, updated_at = NOW() WHERE id = $1`,
+          [pres.verifier_request_id]
+        );
+      }
+      return res.json({ success: true, message: 'VP rejected — Employee 1 can recompose' });
+    }
+
+    // Approve: mark as peer_approved and submit to verifier
+    await query(
+      `UPDATE presentations
+       SET internal_status = 'submitted', reviewed_by_user_id = $1, reviewed_at = NOW(), reviewer_note = $2
+       WHERE id = $3`,
+      [user.id, note || null, id]
+    );
+
+    // If linked to a verification request, mark as submitted
+    if (pres.verifier_request_id) {
+      await query(
+        `UPDATE verification_requests SET status = 'submitted', presentation_id = $1, updated_at = NOW() WHERE id = $2`,
+        [id, pres.verifier_request_id]
+      );
+    }
+
+    await writeAuditLog('vp_peer_approved', null, null, 'VerifiablePresentation');
+
+    res.json({ success: true, message: 'VP approved and submitted to verifier' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
