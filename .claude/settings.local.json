@@ -436,7 +436,9 @@
       "Bash(curl -s -X POST http://localhost:3002/api/organizations/apply -F 'org_name=Test Corp' -F email=test@corp.com -F 'director_full_name=Test Dir' -F aadhaar_number=123456789012 -F dob=1990-01-01 -F gender=Male -F state=Maharashtra -F pincode=400001 -F 'company_name=Test Corp Pvt Ltd' -F cin=U72900MH2020PTC999999 -F company_status=Active -F 'company_category=Private Limited' -F date_of_incorporation=2020-01-01 -F pan_number=AABCT1234D -F gstn= -F ie_code= -F 'director_name=Test Dir' -F din=12345678 -F designation=Director -F 'super_admin_name=Admin User' -F super_admin_email=admin@testcorp.com -F 'requester_name=Requester User' -F requester_email=requester@testcorp.com -F 'documents=[{\"type\":\"MCARegistration\",\"vc_type\":\"MCARegistration\",\"reference_number\":\"U72900MH2020PTC999999\",\"required\":true}]')",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3002/api/portal/corporate-applications)",
       "Bash(chmod +x /Users/kamleshnagware/did-vc-project/deploy.sh)",
-      "Bash(bash -n /Users/kamleshnagware/did-vc-project/deploy.sh)"
+      "Bash(bash -n /Users/kamleshnagware/did-vc-project/deploy.sh)",
+      "Bash(git branch:*)",
+      "Bash(git stash:*)"
     ]
   }
 }

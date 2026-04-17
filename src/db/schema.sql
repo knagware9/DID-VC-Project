@@ -516,13 +516,17 @@ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
--- Widen application_status to include 'activated' and 'issued'
--- (existing values: pending, partial, complete, rejected — keep all of them)
+-- Widen application_status to include 'activated', 'issued', 'signatory_approved', 'maker_reviewed'
+-- (uses the full final set so this step is safe to re-run against any data)
 DO $$
 BEGIN
   ALTER TABLE organization_applications DROP CONSTRAINT IF EXISTS chk_org_app_status;
   ALTER TABLE organization_applications ADD CONSTRAINT chk_org_app_status
-    CHECK (application_status IN ('pending', 'partial', 'complete', 'rejected', 'activated', 'issued'));
+    CHECK (application_status IN (
+      'pending', 'partial', 'complete', 'rejected',
+      'activated', 'issued',
+      'signatory_approved', 'maker_reviewed'
+    ));
 END $$;
 
 -- Indexes for the new FK columns (used in hot-path queries)
