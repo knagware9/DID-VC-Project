@@ -139,7 +139,83 @@ fi
 #  PHASE 1 — SETUP   (skipped with --skip-setup)
 # =============================================================================
 
-check_prerequisites() { : ; }  # implemented in Task 2
+check_prerequisites() {
+  step "Checking prerequisites"
+
+  # Detect OS for install hints
+  local os="unknown"
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    os="macos"
+  elif [[ -f /etc/os-release ]]; then
+    os=$(grep '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"' | tr '[:upper:]' '[:lower:]')
+  fi
+
+  # ── Docker ──────────────────────────────────────────────────────────────────
+  if ! command -v docker &>/dev/null; then
+    error "Docker is not installed."
+    case "$os" in
+      macos)         error "  Install: https://docs.docker.com/desktop/mac/install/" ;;
+      ubuntu|debian) error "  Install: https://docs.docker.com/engine/install/ubuntu/" ;;
+      *)             error "  Install: https://docs.docker.com/get-docker/" ;;
+    esac
+    exit 1
+  fi
+  if ! docker info &>/dev/null; then
+    error "Docker daemon is not running."
+    [[ "$os" == "macos" ]] && error "  Open Docker Desktop and wait for it to start."
+    exit 1
+  fi
+  success "Docker: $(docker --version | awk '{print $3}' | tr -d ',')"
+
+  # ── Docker Compose v2 ────────────────────────────────────────────────────────
+  if ! docker compose version &>/dev/null; then
+    error "Docker Compose v2 is required ('docker compose', not 'docker-compose')."
+    error "  It ships with Docker Desktop >= 3.x. Update Docker or install the plugin:"
+    error "  https://docs.docker.com/compose/install/"
+    exit 1
+  fi
+  success "Docker Compose: $(docker compose version --short 2>/dev/null || docker compose version | head -1)"
+
+  # ── Node.js >= 18 ────────────────────────────────────────────────────────────
+  if ! command -v node &>/dev/null; then
+    if [[ "$CONTEXT" == "local" ]]; then
+      warn "Node.js not found (needed by the Besu contract deployer)."
+      case "$os" in
+        macos)         warn "  Install: brew install node@20" ;;
+        ubuntu|debian) warn "  Install: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs" ;;
+        *)             warn "  Install: https://nodejs.org/en/download/" ;;
+      esac
+      warn "  After installing Node, re-run: ./setup.sh"
+      exit 1
+    else
+      error "Node.js >= 18 is required."
+      exit 1
+    fi
+  fi
+  local node_major
+  node_major=$(node --version | tr -d 'v' | cut -d. -f1)
+  if [[ "$node_major" -lt 18 ]]; then
+    error "Node.js >= 18 required, found $(node --version)."
+    error "  Update: https://nodejs.org/en/download/"
+    exit 1
+  fi
+  success "Node.js: $(node --version)"
+
+  # ── curl ─────────────────────────────────────────────────────────────────────
+  if ! command -v curl &>/dev/null; then
+    if [[ "$CONTEXT" == "local" ]]; then
+      warn "curl not found — attempting to install..."
+      case "$os" in
+        macos)         brew install curl && success "curl installed" ;;
+        ubuntu|debian) sudo apt-get install -y curl && success "curl installed" ;;
+        *)             error "curl is required. Install it and retry."; exit 1 ;;
+      esac
+    else
+      error "curl is required but not installed."; exit 1
+    fi
+  fi
+  success "curl: $(curl --version | head -1 | awk '{print $2}')"
+}
 setup_env()           { : ; }  # implemented in Task 3
 init_besu()           { : ; }  # implemented in Task 4
 
