@@ -570,8 +570,51 @@ _wait_http() {
     sleep 3
   done
 }
-seed_database()    { : ; }  # implemented in Task 6
-print_summary()    { : ; }  # implemented in Task 6
+seed_database() {
+  step "Seeding database"
+
+  if $PROD_MODE || [[ "$CONTEXT" == "production" ]]; then
+    warn "PRODUCTION: About to seed the database with demo data."
+    if [[ "$CONTEXT" != "ci" ]]; then
+      echo -n "  Continue? [y/N] "
+      read -r confirm
+      [[ "$confirm" =~ ^[Yy]$ ]] || { warn "Seed skipped."; return 0; }
+    fi
+  fi
+
+  log "Running seed script inside backend container..."
+  if docker compose exec -T backend node dist/db/seed.js 2>&1 | tail -20; then
+    success "Database seeded"
+  else
+    warn "Seed script exited with an error — check logs above."
+  fi
+}
+print_summary() {
+  echo ""
+  divider
+  echo -e "  ${BOLD}━━━ Stack is ready ━━━${RESET}"
+  echo ""
+  echo -e "  Frontend    →  ${GREEN}http://localhost:${FRONTEND_PORT}${RESET}"
+  echo -e "  Backend     →  ${GREEN}http://localhost:${BACKEND_PORT}${RESET}"
+  echo -e "  PostgreSQL  →  ${GREEN}localhost:5433${RESET}"
+  if ! $NO_BESU; then
+    echo -e "  Besu RPC    →  ${GREEN}http://localhost:8545${RESET}"
+  fi
+  echo ""
+  if ! $WITH_SEED; then
+    echo -e "  First time? Seed the database:  ${CYAN}./setup.sh --seed${RESET}"
+  fi
+  echo ""
+  echo -e "  ${BOLD}Useful commands${RESET}"
+  echo -e "  ./setup.sh --logs        tail all service logs"
+  echo -e "  ./setup.sh --logs backend  tail backend logs"
+  echo -e "  ./setup.sh --status      service health overview"
+  echo -e "  ./setup.sh --down        stop everything"
+  echo -e "  ./setup.sh --rollback    restore previous images"
+  echo -e "  ./setup.sh --skip-setup  re-deploy without setup phase"
+  divider
+  echo ""
+}
 
 # =============================================================================
 #  MAIN
