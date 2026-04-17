@@ -380,7 +380,7 @@ build_images() {
   wait "$pid_backend"  || { error "Backend build failed:";  cat "${build_log}.backend"  >&2; failed=true; }
   wait "$pid_frontend" || { error "Frontend build failed:"; cat "${build_log}.frontend" >&2; failed=true; }
 
-  rm -f "${build_log}.backend" "${build_log}.frontend"
+  rm -f "${build_log}" "${build_log}.backend" "${build_log}.frontend"
 
   $failed && exit 4
 
