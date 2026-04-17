@@ -55,7 +55,7 @@ mkdir -p "$TEMP_DIR"
 docker run --rm \
   -v "$CONFIG_FILE:/config/qbft-config.json:ro" \
   -v "$TEMP_DIR:/output" \
-  "hyperledger/besu:24.12" \
+  "hyperledger/besu:24.12.0" \
   operator generate-blockchain-config \
     --config-file=/config/qbft-config.json \
     --to=/output \
