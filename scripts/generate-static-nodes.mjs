@@ -14,6 +14,12 @@ import { join, resolve } from 'path';
 const networkDir = resolve(process.argv[2] || '.');
 const keysDir = join(networkDir, 'keys');
 
+// Validate keysDir exists before readdirSync
+if (!statSync(keysDir, { throwIfNoEntry: false })?.isDirectory()) {
+  console.error(`[generate-static-nodes] keys directory not found: ${keysDir}`);
+  process.exit(1);
+}
+
 // List only directories (skip files), sort for deterministic ordering
 const keyDirs = readdirSync(keysDir)
   .filter(entry => statSync(join(keysDir, entry)).isDirectory())
@@ -28,8 +34,20 @@ const P2P_PORT = 30303;
 
 const enodes = keyDirs.map((dir, index) => {
   const pubKeyPath = join(keysDir, dir, 'key.pub');
-  // key.pub may or may not have a leading 0x — strip it
-  const pubKey = readFileSync(pubKeyPath, 'utf8').trim().replace(/^0x/, '');
+  let pubKey;
+  try {
+    pubKey = readFileSync(pubKeyPath, 'utf8').trim().replace(/^0x/, '');
+  } catch (err) {
+    console.error(`[generate-static-nodes] Cannot read ${pubKeyPath}: ${err.message}`);
+    process.exit(1);
+  }
+  if (!pubKey || !/^[0-9a-fA-F]{128}$/.test(pubKey)) {
+    console.error(
+      `[generate-static-nodes] Invalid pubkey in ${pubKeyPath}: ` +
+      `expected 128 hex chars, got ${pubKey.length} chars`
+    );
+    process.exit(1);
+  }
   const host = `besu-node${index + 1}`;
   return `enode://${pubKey}@${host}:${P2P_PORT}`;
 });
