@@ -325,13 +325,67 @@ setup_env() {
   BACKEND_PORT=$(grep -E '^BACKEND_PORT=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || echo "3001")
   FRONTEND_PORT=$(grep -E '^FRONTEND_PORT=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]' || echo "3000")
 }
-init_besu()           { : ; }  # implemented in Task 4
+init_besu() {
+  if $NO_BESU; then
+    log "Skipping Besu network init (--no-besu)"
+    return 0
+  fi
+
+  if [[ -s "${SCRIPT_DIR}/besu/network/genesis.json" ]]; then
+    success "Besu network already initialized — skipping"
+    return 0
+  fi
+
+  step "Initializing Besu QBFT network (first run)"
+  if ! bash "${SCRIPT_DIR}/scripts/init-besu-network.sh"; then
+    error "Besu network initialization failed."
+    exit 3
+  fi
+  success "Besu network initialized"
+}
 
 # =============================================================================
 #  PHASE 2 — DEPLOY
 # =============================================================================
 
-build_images()     { : ; }  # implemented in Task 4
+build_images() {
+  if $SKIP_BUILD; then
+    warn "Skipping image builds (--skip-build)"
+    return 0
+  fi
+
+  step "Building Docker images (parallel)"
+
+  # Tag existing images as rollback targets before rebuilding
+  for svc in backend frontend; do
+    local img_id
+    img_id=$(docker images -q "did-vc-project-${svc}" 2>/dev/null | head -1 || true)
+    if [[ -n "$img_id" ]]; then
+      docker tag "$img_id" "${svc}-previous" 2>/dev/null && \
+        log "  Tagged ${svc} → ${svc}-previous" || true
+    fi
+  done
+
+  # Build backend and frontend in parallel
+  local build_log
+  build_log=$(mktemp)
+
+  docker compose build backend  > "${build_log}.backend"  2>&1 &
+  local pid_backend=$!
+  docker compose build frontend > "${build_log}.frontend" 2>&1 &
+  local pid_frontend=$!
+
+  local failed=false
+
+  wait "$pid_backend"  || { error "Backend build failed:";  cat "${build_log}.backend"  >&2; failed=true; }
+  wait "$pid_frontend" || { error "Frontend build failed:"; cat "${build_log}.frontend" >&2; failed=true; }
+
+  rm -f "${build_log}.backend" "${build_log}.frontend"
+
+  $failed && exit 4
+
+  success "Images built successfully"
+}
 start_services()   { : ; }  # implemented in Task 5
 wait_for_stack()   { : ; }  # implemented in Task 5
 seed_database()    { : ; }  # implemented in Task 6
