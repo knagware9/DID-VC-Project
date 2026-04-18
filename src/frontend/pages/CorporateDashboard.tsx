@@ -397,7 +397,9 @@ export default function CorporateDashboard() {
   });
   const subRole = (user as any)?.sub_role;
   const [empAccountModal, setEmpAccountModal] = useState<{ email: string; password: string } | null>(null);
-  const CORP_CREDENTIAL_TYPES = ['IECCredential', 'MCARegistration', 'GSTINCredential', 'PANCredential', 'IBDICDigitalIdentityCredential'];
+  const [orgWalletTypes, setOrgWalletTypes] = useState<string[]>([
+    'IECCredential', 'MCARegistration', 'GSTINCredential', 'PANCredential', 'IBDICDigitalIdentityCredential',
+  ]);
 
   useEffect(() => { loadAll(); }, [tab]);
 
@@ -417,9 +419,20 @@ export default function CorporateDashboard() {
           } catch { /* silent */ }
         }
       } else if (tab === 'employees') {
-        const [emp, issued] = await Promise.all([api.getEmployees(token), api.getIssuedByMe(token)]);
+        const [emp, issued, orgCreds] = await Promise.all([
+          api.getEmployees(token),
+          api.getIssuedByMe(token),
+          fetch('/api/credentials/my', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+        ]);
         setEmployees(emp.employees || []);
         setIssuedByMe(issued.credentials || []);
+        // Build dynamic list of shareable types from what the org actually holds
+        const BASE_TYPES = ['IECCredential', 'MCARegistration', 'GSTINCredential', 'PANCredential', 'IBDICDigitalIdentityCredential'];
+        const orgTypes = (orgCreds.credentials || [])
+          .filter((c: any) => !c.revoked)
+          .map((c: any) => c.credential_type as string);
+        const merged = Array.from(new Set([...BASE_TYPES, ...orgTypes]));
+        setOrgWalletTypes(merged);
       } else if (tab === 'issue' || tab === 'request-vc') {
         const data = await api.getIssuers(token);
         setIssuers(data.issuers || []);
@@ -832,7 +845,12 @@ return (
                                 Select which corporate credentials this employee can share on behalf of the organisation:
                               </div>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '0.75rem' }}>
-                                {CORP_CREDENTIAL_TYPES.map(ct => (
+                                {orgWalletTypes.length === 0 && (
+                                  <p style={{ color: '#94a3b8', fontSize: '0.78rem' }}>
+                                    No credentials in corporate wallet yet. Issue or request credentials first.
+                                  </p>
+                                )}
+                                {orgWalletTypes.map(ct => (
                                   <label key={ct} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem' }}>
                                     <input
                                       type="checkbox"
