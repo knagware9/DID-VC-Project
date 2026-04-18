@@ -9,16 +9,25 @@ RUN npm install
 COPY . .
 RUN npm run build
 
+# Copy non-TypeScript assets that tsc doesn't include
+RUN mkdir -p dist/db && cp -r src/db/*.sql dist/db/
+
 FROM node:20-alpine
 WORKDIR /app
 
-# Install only production deps
+# Install curl for Docker healthcheck + production deps
+RUN apk add --no-cache curl
 COPY package*.json ./
 RUN npm install --omit=dev
 
 # Copy built artifacts
 COPY --from=builder /app/dist ./dist
 
+# Entrypoint: sources /shared/addresses.env (Besu contract addresses) if present
+COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 EXPOSE 3001
 ENV NODE_ENV=production
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "dist/server/index.js"]

@@ -41,6 +41,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { tab: 'proof-requests',  label: 'Proof Requests',    icon: '🛡' },
     { tab: 'corp-wallet',     label: 'Wallet',            icon: '💼', subRoles: ['super_admin', 'admin', 'maker', 'checker', 'authorized_signatory', 'requester', 'operator', 'member'] },
     { tab: 'my-wallets',      label: 'My Wallets',        icon: '💼', subRoles: ['employee'] },
+    { tab: 'vp-review',       label: 'VP Review',         icon: '🔍', subRoles: ['employee'] },
     { tab: 'transactions',    label: 'Transactions',      icon: '🔄', subRoles: ['employee'] },
     { tab: 'team',            label: 'Team',              icon: '🤝', subRoles: ['super_admin', 'admin'] },
     { tab: 'vp-queue',        label: 'VP Queue',          icon: '⏳', subRoles: ['checker', 'super_admin'] },

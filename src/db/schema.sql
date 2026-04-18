@@ -100,6 +100,11 @@ CREATE TABLE IF NOT EXISTS credential_shares (
 
 ALTER TABLE presentations ADD COLUMN IF NOT EXISTS direct_share_verifier_did VARCHAR(255);
 ALTER TABLE presentations ADD COLUMN IF NOT EXISTS share_purpose VARCHAR(500);
+ALTER TABLE presentations ADD COLUMN IF NOT EXISTS shared_to_user_id UUID REFERENCES users(id);
+ALTER TABLE presentations ADD COLUMN IF NOT EXISTS internal_status VARCHAR(30) DEFAULT 'draft';
+ALTER TABLE presentations ADD COLUMN IF NOT EXISTS reviewed_by_user_id UUID REFERENCES users(id);
+ALTER TABLE presentations ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+ALTER TABLE presentations ADD COLUMN IF NOT EXISTS reviewer_note TEXT;
 
 DO $$ BEGIN
   IF NOT EXISTS (
@@ -516,13 +521,17 @@ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
--- Widen application_status to include 'activated' and 'issued'
--- (existing values: pending, partial, complete, rejected — keep all of them)
+-- Widen application_status to include 'activated', 'issued', 'signatory_approved', 'maker_reviewed'
+-- (uses the full final set so this step is safe to re-run against any data)
 DO $$
 BEGIN
   ALTER TABLE organization_applications DROP CONSTRAINT IF EXISTS chk_org_app_status;
   ALTER TABLE organization_applications ADD CONSTRAINT chk_org_app_status
-    CHECK (application_status IN ('pending', 'partial', 'complete', 'rejected', 'activated', 'issued'));
+    CHECK (application_status IN (
+      'pending', 'partial', 'complete', 'rejected',
+      'activated', 'issued',
+      'signatory_approved', 'maker_reviewed'
+    ));
 END $$;
 
 -- Indexes for the new FK columns (used in hot-path queries)

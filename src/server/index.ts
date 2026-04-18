@@ -241,11 +241,21 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
 
 app.get('/api/auth/me', requireAuth, async (req, res) => {
   const user = (req as any).user;
-  const didResult = await query(
-    "SELECT did_string FROM dids WHERE user_id = $1 AND did_type = 'parent' LIMIT 1",
-    [orgDIDOwner(user)]
-  );
-  const did = didResult.rows[0]?.did_string;
+  let did: string | undefined;
+  if ((user as any).sub_role === 'employee') {
+    // Employees have a sub-DID stored in employee_registry → dids
+    const subDidResult = await query(
+      `SELECT d.did_string FROM employee_registry er JOIN dids d ON er.sub_did_id = d.id WHERE er.user_id = $1 LIMIT 1`,
+      [user.id]
+    );
+    did = subDidResult.rows[0]?.did_string;
+  } else {
+    const didResult = await query(
+      "SELECT did_string FROM dids WHERE user_id = $1 AND did_type = 'parent' LIMIT 1",
+      [orgDIDOwner(user)]
+    );
+    did = didResult.rows[0]?.did_string;
+  }
   res.json({
     success: true,
     user: { id: user.id, email: user.email, role: user.role, did, name: user.name, authority_type: (user as any).authority_type || null, sub_role: (user as any).sub_role || null, org_id: (user as any).org_id || null },
@@ -2058,9 +2068,10 @@ app.get('/api/besu/network', (req, res) => {
 
 // ─── Besu Explorer Endpoints ──────────────────────────────────────────────────
 
-// Raw JSON-RPC proxy to local chain (uses Node 18+ native fetch)
-async function rpc(method: string, params: any[] = []): Promise<any> {
-  const res = await fetch(process.env.BESU_RPC_URL || 'http://localhost:8545', {
+// Raw JSON-RPC proxy — supports targeting any node URL
+async function rpc(method: string, params: any[] = [], nodeUrl?: string): Promise<any> {
+  const url = nodeUrl || process.env.BESU_RPC_URL || 'http://localhost:8545';
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', method, params, id: 1 }),
@@ -2070,32 +2081,50 @@ async function rpc(method: string, params: any[] = []): Promise<any> {
   return json.result;
 }
 
-// GET /api/besu/explorer/overview — chain summary
+function hex(n: number): string { return '0x' + n.toString(16); }
+
+// Fetch blocks in small batches to avoid overwhelming the RPC
+async function fetchBlocksBatched(indices: number[], withTxns: boolean, batchSize = 20): Promise<any[]> {
+  const results: any[] = [];
+  for (let i = 0; i < indices.length; i += batchSize) {
+    const batch = indices.slice(i, i + batchSize);
+    const batchResults = await Promise.all(
+      batch.map(n => rpc('eth_getBlockByNumber', [hex(n), withTxns]).catch(() => null))
+    );
+    results.push(...batchResults);
+  }
+  return results;
+}
+
+// GET /api/besu/explorer/overview — chain summary (efficient: no full block scan)
 app.get('/api/besu/explorer/overview', async (_req, res) => {
   try {
-    const [blockHex, chainIdHex, gasPrice] = await Promise.all([
+    const [blockHex, chainIdHex] = await Promise.all([
       rpc('eth_blockNumber'),
       rpc('eth_chainId'),
-      rpc('eth_gasPrice'),
     ]);
     const latestBlockNumber = parseInt(blockHex, 16);
     const latestBlock = await rpc('eth_getBlockByNumber', [blockHex, true]);
-    const totalTxns = latestBlock?.transactions?.length || 0;
 
-    // Count transactions across all blocks
-    let totalTransactions = 0;
-    const blockPromises = Array.from({ length: latestBlockNumber + 1 }, (_, i) =>
-      rpc('eth_getBlockByNumber', [hex(i), false])
+    // Count VC transactions from DB (instant, no RPC scan needed)
+    const txCountRow = await query(
+      `SELECT COUNT(*) as cnt FROM credentials WHERE polygon_tx_hash IS NOT NULL`
     );
-    const blocks = await Promise.all(blockPromises);
-    for (const b of blocks) totalTransactions += (b?.transactions?.length || 0);
+    const totalTransactions = parseInt(txCountRow.rows[0].cnt, 10);
+
+    // Peer count and QBFT validators
+    const [peerCountHex, validators] = await Promise.all([
+      rpc('net_peerCount').catch(() => '0x0'),
+      rpc('qbft_getValidatorsByBlockNumber', ['latest']).catch(() => []),
+    ]);
 
     res.json({
       success: true,
       blockNumber: latestBlockNumber,
       chainId: parseInt(chainIdHex, 16),
-      gasPrice: parseInt(gasPrice, 16),
       totalTransactions,
+      peerCount: parseInt(peerCountHex, 16),
+      validatorCount: (validators || []).length,
       didRegistryAddress: process.env.DID_REGISTRY_ADDRESS || null,
       vcRegistryAddress: process.env.VC_REGISTRY_ADDRESS || null,
       rpcUrl: process.env.BESU_RPC_URL || 'http://localhost:8545',
@@ -2106,14 +2135,13 @@ app.get('/api/besu/explorer/overview', async (_req, res) => {
         timestamp: latestBlock?.timestamp ? parseInt(latestBlock.timestamp, 16) : null,
         txCount: latestBlock?.transactions?.length || 0,
         gasUsed: latestBlock?.gasUsed ? parseInt(latestBlock.gasUsed, 16) : 0,
+        miner: latestBlock?.miner || null,
       },
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
-
-function hex(n: number): string { return '0x' + n.toString(16); }
 
 // GET /api/besu/explorer/blocks?page=1&limit=20
 app.get('/api/besu/explorer/blocks', async (req, res) => {
@@ -2216,65 +2244,178 @@ app.get('/api/besu/explorer/tx/:hash', async (req, res) => {
   }
 });
 
-// GET /api/besu/explorer/transactions — all transactions with DB annotations
+// GET /api/besu/explorer/transactions — DB-anchored txns + deploy txns from early blocks
 app.get('/api/besu/explorer/transactions', async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-    const latestHex = await rpc('eth_blockNumber');
-    const latest = parseInt(latestHex, 16);
-
-    const allBlocks = await Promise.all(
-      Array.from({ length: latest + 1 }, (_, i) => rpc('eth_getBlockByNumber', [hex(i), true]))
-    );
-
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 200);
     const DID_ADDR = (process.env.DID_REGISTRY_ADDRESS || '').toLowerCase();
     const VC_ADDR  = (process.env.VC_REGISTRY_ADDRESS  || '').toLowerCase();
 
-    // Flatten all transactions, newest first
-    const txns: any[] = [];
-    for (const block of allBlocks.reverse()) {
-      if (!block) continue;
-      const ts = parseInt(block.timestamp, 16);
-      const bn = parseInt(block.number, 16);
-      for (const tx of (block.transactions || [])) {
+    // ── 1. Pull all anchored credential txns from DB (fast, no RPC scan) ──
+    const credRows = await query(
+      `SELECT c.polygon_tx_hash as hash, c.credential_type, c.issued_at,
+              c.polygon_block_number as block_number, c.polygon_anchored_at,
+              hd.did_string as holder_did, u.name as holder_name,
+              id2.did_string as issuer_did
+       FROM credentials c
+       LEFT JOIN dids hd  ON hd.id  = c.holder_did_id
+       LEFT JOIN dids id2 ON id2.id = c.issuer_did_id
+       LEFT JOIN users u  ON u.id   = hd.user_id
+       WHERE c.polygon_tx_hash IS NOT NULL
+       ORDER BY c.issued_at DESC
+       LIMIT $1`, [limit]
+    );
+
+    // Enrich with on-chain data (batch, no more than 20 at a time)
+    const credTxns = await Promise.all(
+      credRows.rows.map(async (row: any) => {
+        try {
+          const tx = await rpc('eth_getTransactionByHash', [row.hash]);
+          const bn = tx ? parseInt(tx.blockNumber || '0', 16) : (row.block_number || 0);
+          const block = tx ? await rpc('eth_getBlockByNumber', [hex(bn), false]) : null;
+          return {
+            hash: row.hash,
+            blockNumber: bn,
+            timestamp: block ? parseInt(block.timestamp, 16) : Math.floor(new Date(row.polygon_anchored_at || row.issued_at).getTime() / 1000),
+            from: tx?.from || '—',
+            to: tx?.to || VC_ADDR,
+            gas: tx ? parseInt(tx.gas || '0', 16) : 0,
+            contract: 'VC Registry',
+            type: 'VC',
+            credential: {
+              credential_type: row.credential_type,
+              issued_at: row.issued_at,
+              holder_did: row.holder_did,
+              holder_name: row.holder_name,
+              issuer_did: row.issuer_did,
+            },
+          };
+        } catch {
+          return {
+            hash: row.hash,
+            blockNumber: row.block_number || 0,
+            timestamp: Math.floor(new Date(row.issued_at).getTime() / 1000),
+            from: '—', to: VC_ADDR, gas: 0,
+            contract: 'VC Registry', type: 'VC',
+            credential: { credential_type: row.credential_type, issued_at: row.issued_at, holder_did: row.holder_did, holder_name: row.holder_name },
+          };
+        }
+      })
+    );
+
+    // ── 2. Scan recent 150 blocks for deploy/transfer transactions ──
+    // Deploy txns happen when besu-deployer runs (at chain startup, not block 0).
+    const latestHex = await rpc('eth_blockNumber');
+    const latest = parseInt(latestHex, 16);
+    const scanCount = Math.min(150, latest + 1);
+    const scanFrom = Math.max(0, latest - scanCount + 1);
+    const earlyBlocks = await fetchBlocksBatched(
+      Array.from({ length: scanCount }, (_, i) => scanFrom + i), true
+    );
+
+    const deployTxns: any[] = [];
+    for (const b of earlyBlocks) {
+      if (!b || !b.transactions?.length) continue;
+      const ts = parseInt(b.timestamp, 16);
+      const bn = parseInt(b.number, 16);
+      for (const tx of b.transactions) {
         const toAddr = (tx.to || '').toLowerCase();
-        txns.push({
-          hash: tx.hash,
-          blockNumber: bn,
-          timestamp: ts,
-          from: tx.from,
-          to: tx.to,
-          gas: parseInt(tx.gas || '0', 16),
-          contract: !tx.to ? '(deploy)' :
-            toAddr === DID_ADDR ? 'DID Registry' :
-            toAddr === VC_ADDR  ? 'VC Registry'  : tx.to,
-          type: !tx.to ? 'deploy' : toAddr === DID_ADDR ? 'DID' : toAddr === VC_ADDR ? 'VC' : 'transfer',
-        });
+        const isKnownRegistry = toAddr === DID_ADDR || toAddr === VC_ADDR;
+        const isDeploy = !tx.to;
+        if (isDeploy || !isKnownRegistry) {
+          deployTxns.push({
+            hash: tx.hash,
+            blockNumber: bn,
+            timestamp: ts,
+            from: tx.from,
+            to: tx.to,
+            gas: parseInt(tx.gas || '0', 16),
+            contract: isDeploy ? '(contract deploy)' :
+              toAddr === DID_ADDR ? 'DID Registry' :
+              toAddr === VC_ADDR  ? 'VC Registry'  : tx.to,
+            type: isDeploy ? 'deploy' :
+              toAddr === DID_ADDR ? 'DID' :
+              toAddr === VC_ADDR  ? 'VC' : 'transfer',
+            credential: null,
+          });
+        }
       }
-      if (txns.length >= limit) break;
     }
 
-    // Annotate with DB credential info
-    const txHashes = txns.filter(t => t.type === 'VC').map(t => t.hash);
-    let credMap: Record<string, any> = {};
-    if (txHashes.length > 0) {
-      const credRows = await query(
-        `SELECT c.polygon_tx_hash, c.credential_type, c.issued_at,
-                hd.did_string as holder_did, u.name as holder_name
-         FROM credentials c
-         LEFT JOIN dids hd ON hd.id = c.holder_did_id
-         LEFT JOIN users u ON u.id = hd.user_id
-         WHERE c.polygon_tx_hash = ANY($1)`, [txHashes]
-      );
-      for (const r of credRows.rows) credMap[r.polygon_tx_hash] = r;
-    }
+    // ── 3. Merge: deploy txns first (oldest), then VC txns (newest first) ──
+    // Remove any deploy-block VC txns already in credTxns to avoid dupes
+    const credHashes = new Set(credTxns.map((t: any) => t.hash));
+    const uniqueDeploys = deployTxns.filter(t => !credHashes.has(t.hash));
 
-    const annotated = txns.slice(0, limit).map(t => ({
-      ...t,
-      credential: credMap[t.hash] || null,
-    }));
+    const allTxns = [...uniqueDeploys, ...credTxns];
 
-    res.json({ success: true, transactions: annotated, total: txns.length });
+    res.json({ success: true, transactions: allTxns.slice(0, limit), total: allTxns.length });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/besu/explorer/nodes — QBFT validator nodes status
+app.get('/api/besu/explorer/nodes', async (_req, res) => {
+  try {
+    const baseRpc = process.env.BESU_RPC_URL || 'http://besu-node1:8545';
+
+    const [latestHex, validators, peerCountHex] = await Promise.all([
+      rpc('eth_blockNumber'),
+      rpc('qbft_getValidatorsByBlockNumber', ['latest']).catch(() => []),
+      rpc('net_peerCount').catch(() => '0x0'),
+    ]);
+    const latestBlock = parseInt(latestHex, 16);
+
+    // Query each node's block number individually (in parallel, small set)
+    const NODE_COUNT = 5;
+    const nodeStatuses = await Promise.all(
+      Array.from({ length: NODE_COUNT }, async (_, i) => {
+        const nodeNum = i + 1;
+        const nodeUrl = baseRpc.replace(/besu-node\d+/, `besu-node${nodeNum}`);
+        try {
+          const [nodeBlockHex, nodePeerHex] = await Promise.all([
+            rpc('eth_blockNumber', [], nodeUrl),
+            rpc('net_peerCount',   [], nodeUrl).catch(() => '0x0'),
+          ]);
+          const nodeBlock = parseInt(nodeBlockHex, 16);
+          const validatorAddr = (validators || [])[i] || null;
+          return {
+            id: nodeNum,
+            name: `besu-node${nodeNum}`,
+            url: nodeUrl,
+            blockNumber: nodeBlock,
+            peerCount: parseInt(nodePeerHex, 16),
+            synced: Math.abs(nodeBlock - latestBlock) <= 2,
+            validatorAddress: validatorAddr,
+            isValidator: !!(validatorAddr),
+            status: 'online',
+          };
+        } catch {
+          return {
+            id: nodeNum,
+            name: `besu-node${nodeNum}`,
+            url: nodeUrl,
+            blockNumber: null,
+            peerCount: 0,
+            synced: false,
+            validatorAddress: (validators || [])[i] || null,
+            isValidator: true,
+            status: 'offline',
+          };
+        }
+      })
+    );
+
+    res.json({
+      success: true,
+      network: process.env.BESU_NETWORK || 'dev',
+      chainId: 1337,
+      latestBlock,
+      totalPeers: parseInt(peerCountHex, 16),
+      validatorCount: (validators || []).length,
+      nodes: nodeStatuses,
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -4446,6 +4587,153 @@ app.get('/api/holder/transactions', requireAuth, requireRole('corporate'), async
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     res.json({ success: true, transactions: all });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Employee Peer VP Review Endpoints ───────────────────────────────────────
+
+// GET /api/employee/vp-pending-review — Employee 2 sees VPs shared to them for peer review
+app.get('/api/employee/vp-pending-review', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const result = await query(
+      `SELECT p.id, p.vp_json, p.internal_status, p.created_at, p.reviewer_note,
+              p.verifier_request_id,
+              sender.name AS sender_name, sender.email AS sender_email,
+              vr.required_credential_types, vr.status AS vr_status
+       FROM presentations p
+       JOIN dids d ON p.holder_did_id = d.id
+       JOIN users sender ON d.user_id = sender.id
+       LEFT JOIN verification_requests vr ON p.verifier_request_id = vr.id
+       WHERE p.shared_to_user_id = $1
+         AND p.internal_status = 'pending_peer_review'
+       ORDER BY p.created_at DESC`,
+      [user.id]
+    );
+    res.json({ success: true, presentations: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/presentations/:id/share-to-peer — Employee 1 shares a composed VP to Employee 2
+app.post('/api/presentations/:id/share-to-peer', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { id } = req.params;
+    const { peerEmail, note, verifierRequestId } = req.body;
+
+    if (!peerEmail) return res.status(400).json({ error: 'peerEmail is required' });
+
+    // Validate the presentation belongs to this user
+    const presResult = await query(
+      `SELECT p.id, p.holder_did_id, p.verifier_request_id, p.internal_status
+       FROM presentations p
+       JOIN dids d ON p.holder_did_id = d.id
+       WHERE p.id = $1 AND d.user_id = $2`,
+      [id, user.id]
+    );
+    if (presResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Presentation not found or not owned by you' });
+    }
+
+    const pres = presResult.rows[0];
+    if (pres.internal_status !== 'draft' && pres.internal_status !== 'pending_peer_review') {
+      return res.status(400).json({ error: `Presentation is already in status: ${pres.internal_status}` });
+    }
+
+    // Look up peer by email — must be in the same org
+    const peerResult = await query(
+      `SELECT u.id FROM users u WHERE u.email = $1 AND u.org_id = $2 AND u.role = 'corporate'`,
+      [peerEmail, user.org_id]
+    );
+    if (peerResult.rows.length === 0) {
+      return res.status(404).json({ error: `Peer employee not found: ${peerEmail}` });
+    }
+    const peerId = peerResult.rows[0].id;
+
+    // Resolve verifier_request_id: use existing or the one passed in body
+    const vrId = pres.verifier_request_id || verifierRequestId || null;
+
+    // Update presentation: set shared_to_user_id, internal_status, and optionally verifier_request_id
+    await query(
+      `UPDATE presentations
+       SET shared_to_user_id = $1, internal_status = 'pending_peer_review',
+           reviewer_note = $2, verifier_request_id = COALESCE($3, verifier_request_id)
+       WHERE id = $4`,
+      [peerId, note || null, vrId, id]
+    );
+
+    await writeAuditLog('vp_shared_to_peer', null, null, 'VerifiablePresentation');
+
+    res.json({ success: true, message: `VP shared to ${peerEmail} for review` });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/presentations/:id/peer-approve — Employee 2 approves VP and forwards to verifier
+app.post('/api/presentations/:id/peer-approve', requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { id } = req.params;
+    const { decision, note } = req.body; // decision: 'approve' | 'reject'
+
+    if (!decision || !['approve', 'reject'].includes(decision)) {
+      return res.status(400).json({ error: "decision must be 'approve' or 'reject'" });
+    }
+
+    // Validate the presentation is shared to this user
+    const presResult = await query(
+      `SELECT p.id, p.verifier_request_id, p.internal_status, p.holder_did_id
+       FROM presentations p
+       WHERE p.id = $1 AND p.shared_to_user_id = $2 AND p.internal_status = 'pending_peer_review'`,
+      [id, user.id]
+    );
+    if (presResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Presentation not found in your review queue' });
+    }
+
+    const pres = presResult.rows[0];
+
+    if (decision === 'reject') {
+      await query(
+        `UPDATE presentations
+         SET internal_status = 'peer_rejected', reviewed_by_user_id = $1, reviewed_at = NOW(), reviewer_note = $2
+         WHERE id = $3`,
+        [user.id, note || null, id]
+      );
+      // If linked to a verification request, revert to pending so Employee 1 can recompose
+      if (pres.verifier_request_id) {
+        await query(
+          `UPDATE verification_requests SET status = 'pending', presentation_id = NULL, updated_at = NOW() WHERE id = $1`,
+          [pres.verifier_request_id]
+        );
+      }
+      return res.json({ success: true, message: 'VP rejected — Employee 1 can recompose' });
+    }
+
+    // Approve: mark as peer_approved and submit to verifier
+    await query(
+      `UPDATE presentations
+       SET internal_status = 'submitted', reviewed_by_user_id = $1, reviewed_at = NOW(), reviewer_note = $2
+       WHERE id = $3`,
+      [user.id, note || null, id]
+    );
+
+    // If linked to a verification request, mark as submitted
+    if (pres.verifier_request_id) {
+      await query(
+        `UPDATE verification_requests SET status = 'submitted', presentation_id = $1, updated_at = NOW() WHERE id = $2`,
+        [id, pres.verifier_request_id]
+      );
+    }
+
+    await writeAuditLog('vp_peer_approved', null, null, 'VerifiablePresentation');
+
+    res.json({ success: true, message: 'VP approved and submitted to verifier' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

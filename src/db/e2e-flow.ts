@@ -10,13 +10,11 @@
  *   6. XYZ   (Holder)       → composes & submits VP
  *   7. SBI   (Verifier)     → reviews & approves
  */
-import { readFileSync } from 'fs';
 import bcrypt from 'bcryptjs';
 import { query, pool } from './index.js';
 
-const BASE = 'http://localhost:3002';
+const BASE = 'http://localhost:3001';
 const PWD  = 'Platform@123';
-const LOG  = '/private/tmp/backend.log';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -35,16 +33,7 @@ async function api(method: string, path: string, body?: any, token?: string) {
 }
 
 async function login(email: string, password = PWD): Promise<string> {
-  const { tempToken } = await api('POST', '/api/auth/login', { email, password });
-  await sleep(400);
-
-  // Read MFA code for this user from the backend log
-  const log = readFileSync(LOG, 'utf8');
-  const matches = [...log.matchAll(new RegExp(`\\[MFA\\] Code for ${email.replace(/[.@]/g, '\\$&')}: (\\d{6})`, 'g'))];
-  const code = matches.at(-1)?.[1];
-  if (!code) throw new Error(`No MFA code found in log for ${email}`);
-
-  const { token } = await api('POST', '/api/auth/verify-mfa', { tempToken, code });
+  const { token } = await api('POST', '/api/auth/login', { email, password });
   return token;
 }
 
