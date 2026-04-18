@@ -38,6 +38,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { tab: 'corp-queue',      label: 'Review Queue',      icon: '🔍', subRoles: ['maker', 'super_admin'] },
     { tab: 'checker-queue',   label: 'Approval Queue',    icon: '✅', subRoles: ['checker', 'super_admin'] },
     { tab: 'signatory-queue', label: 'Sign & Submit',     icon: '✍️',  subRoles: ['authorized_signatory', 'super_admin'] },
+    { tab: 'did-issued',      label: 'DID Issued',        icon: '🔑',  subRoles: ['authorized_signatory'] },
     { tab: 'proof-requests',  label: 'Proof Requests',    icon: '🛡' },
     { tab: 'corp-wallet',     label: 'Wallet',            icon: '💼', subRoles: ['super_admin', 'admin', 'maker', 'checker', 'authorized_signatory', 'requester', 'operator', 'member'] },
     { tab: 'my-wallets',      label: 'My Wallets',        icon: '💼', subRoles: ['employee'] },

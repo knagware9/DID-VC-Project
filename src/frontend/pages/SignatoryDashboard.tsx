@@ -11,9 +11,43 @@ export default function SignatoryDashboard() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
+  // Issued DID state
+  const [issuedDids, setIssuedDids] = useState<any[]>([]);
+  const [sharingId, setSharingId] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<'applications' | 'issued-dids'>('applications');
+
   const authHeader = () => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' });
 
-  useEffect(() => { loadApplications(); }, [token]);
+  useEffect(() => {
+    loadApplications();
+    loadIssuedDids();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  async function loadIssuedDids() {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/corporate/signatory/issued-dids', { headers: authHeader() });
+      const data = await res.json();
+      if (res.ok) setIssuedDids(data.issued_dids || []);
+    } catch { /* silent */ }
+  }
+
+  async function handleShareToAdmin(didReqId: string) {
+    setSharingId(didReqId);
+    try {
+      const res = await fetch(`/api/corporate/signatory/issued-dids/${didReqId}/share`, {
+        method: 'POST', headers: authHeader(), body: '{}',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Share failed');
+      setMsg('✓ DID shared to Corporate Super Admin.');
+      setMsgType('success');
+      loadIssuedDids();
+    } catch (e: any) {
+      setMsg(e.message); setMsgType('error');
+    } finally { setSharingId(null); }
+  }
 
   async function loadApplications() {
     setLoading(true);
@@ -74,11 +108,33 @@ export default function SignatoryDashboard() {
       <div style={{ maxWidth: 720, margin: '0 auto' }}>
 
         {/* Header */}
-        <div style={{ marginBottom: '2rem' }}>
+        <div style={{ marginBottom: '1.5rem' }}>
           <h1 style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.5rem', margin: 0 }}>Authorized Signatory</h1>
           <p style={{ color: '#64748b', fontSize: '0.875rem', marginTop: '0.25rem' }}>
-            Review and approve corporate registration applications assigned to you.
+            Review applications and share issued DIDs to your corporate admin.
           </p>
+        </div>
+
+        {/* Section tabs */}
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+          <button
+            onClick={() => setActiveSection('applications')}
+            style={{ padding: '0.5rem 1.25rem', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem',
+              background: activeSection === 'applications' ? '#2563eb' : '#f1f5f9',
+              color: activeSection === 'applications' ? '#fff' : '#374151' }}>
+            ✍️ Applications
+          </button>
+          <button
+            onClick={() => setActiveSection('issued-dids')}
+            style={{ padding: '0.5rem 1.25rem', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem',
+              background: activeSection === 'issued-dids' ? '#7c3aed' : '#f1f5f9',
+              color: activeSection === 'issued-dids' ? '#fff' : '#374151', position: 'relative' }}>
+            🔑 Issued DIDs {issuedDids.filter(d => !d.as_shared_to_admin_at).length > 0 && (
+              <span style={{ position: 'absolute', top: -6, right: -6, background: '#ef4444', color: '#fff', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700 }}>
+                {issuedDids.filter(d => !d.as_shared_to_admin_at).length}
+              </span>
+            )}
+          </button>
         </div>
 
         {msg && (
@@ -92,18 +148,21 @@ export default function SignatoryDashboard() {
           </div>
         )}
 
-        {loading && (
-          <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>Loading…</div>
-        )}
+        {/* ── Applications section ── */}
+        {activeSection === 'applications' && (
+          <>
+            {loading && (
+              <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>Loading…</div>
+            )}
 
-        {!loading && applications.length === 0 && (
-          <div style={{ background: 'white', borderRadius: 12, padding: '3rem', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>📋</div>
-            <div style={{ color: '#64748b', fontSize: '0.9rem' }}>No pending applications assigned to you.</div>
-          </div>
-        )}
+            {!loading && applications.length === 0 && (
+              <div style={{ background: 'white', borderRadius: 12, padding: '3rem', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>📋</div>
+                <div style={{ color: '#64748b', fontSize: '0.9rem' }}>No pending applications assigned to you.</div>
+              </div>
+            )}
 
-        {applications.map((app: any) => {
+            {applications.map((app: any) => {
           const docs: any[] = app.documents || [];
           return (
             <div key={app.id} style={{ background: 'white', borderRadius: 12, padding: '1.5rem', marginBottom: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -203,6 +262,65 @@ export default function SignatoryDashboard() {
             </div>
           );
         })}
+          </>
+        )}
+
+        {/* ── Issued DIDs section ── */}
+        {activeSection === 'issued-dids' && (
+          <div>
+            <div style={{ marginBottom: '1rem', fontSize: '0.875rem', color: '#64748b' }}>
+              DIDs issued for requests you approved. Share each with the Corporate Super Admin to notify them.
+            </div>
+
+            {issuedDids.length === 0 ? (
+              <div style={{ background: 'white', borderRadius: 12, padding: '3rem', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🔑</div>
+                <div style={{ color: '#64748b', fontSize: '0.9rem' }}>No issued DIDs yet.</div>
+              </div>
+            ) : issuedDids.map((d: any) => {
+              const shared = !!d.as_shared_to_admin_at;
+              return (
+                <div key={d.id} style={{ background: 'white', borderRadius: 12, padding: '1.5rem', marginBottom: '1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: shared ? '1px solid #bbf7d0' : '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                    <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>
+                      🏢 {d.org_name}
+                    </div>
+                    <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 700,
+                      background: shared ? '#dcfce7' : '#fef9c3',
+                      color: shared ? '#166534' : '#92400e' }}>
+                      {shared ? '✓ Shared to Admin' : '⏳ Pending Share'}
+                    </span>
+                  </div>
+
+                  <div style={{ background: '#f8fafc', borderRadius: 8, padding: '0.75rem', marginBottom: '0.75rem', fontFamily: 'monospace', fontSize: '0.78rem', color: '#1e40af', wordBreak: 'break-all' as const }}>
+                    {d.did_string || '(DID string not available)'}
+                  </div>
+
+                  {d.purpose && (
+                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '0.5rem' }}>
+                      Purpose: {d.purpose}
+                    </div>
+                  )}
+
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: shared ? '0' : '1rem' }}>
+                    Issued: {new Date(d.updated_at).toLocaleString()}
+                    {shared && <span> · Shared: {new Date(d.as_shared_to_admin_at).toLocaleString()}</span>}
+                  </div>
+
+                  {!shared && (
+                    <button
+                      disabled={sharingId === d.id}
+                      onClick={() => handleShareToAdmin(d.id)}
+                      style={{ width: '100%', padding: '0.65rem', background: sharingId === d.id ? '#94a3b8' : '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: sharingId === d.id ? 'default' : 'pointer', fontSize: '0.875rem' }}>
+                      {sharingId === d.id ? 'Sharing…' : '📤 Share to Corporate Super Admin'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
       </div>
     </div>
   );

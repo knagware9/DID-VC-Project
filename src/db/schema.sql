@@ -441,15 +441,24 @@ CREATE TABLE IF NOT EXISTS did_requests (
                     )),
   corp_reviewer_id  UUID REFERENCES users(id),
   corp_checker_id   UUID REFERENCES users(id),
-  corp_signatory_id UUID REFERENCES users(id),
-  created_did_id    UUID REFERENCES dids(id),
-  rejection_reason  TEXT,
-  created_at        TIMESTAMPTZ DEFAULT NOW(),
-  updated_at        TIMESTAMPTZ DEFAULT NOW()
+  corp_signatory_id       UUID REFERENCES users(id),
+  created_did_id          UUID REFERENCES dids(id),
+  rejection_reason        TEXT,
+  as_notified_at          TIMESTAMPTZ,          -- set when gov agency issues the DID
+  as_shared_to_admin_at   TIMESTAMPTZ,          -- set when AS shares to corporate super_admin
+  created_at              TIMESTAMPTZ DEFAULT NOW(),
+  updated_at              TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_did_requests_org         ON did_requests(org_id);
 CREATE INDEX IF NOT EXISTS idx_did_requests_requester   ON did_requests(requester_user_id);
 CREATE INDEX IF NOT EXISTS idx_did_requests_corp_status ON did_requests(corp_status);
+
+-- Idempotent migrations for did_requests (safe to run repeatedly)
+ALTER TABLE did_requests ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending';
+ALTER TABLE did_requests ADD COLUMN IF NOT EXISTS issuer_user_id UUID REFERENCES users(id);
+ALTER TABLE did_requests ADD COLUMN IF NOT EXISTS as_notified_at TIMESTAMPTZ;
+ALTER TABLE did_requests ADD COLUMN IF NOT EXISTS as_shared_to_admin_at TIMESTAMPTZ;
+ALTER TABLE did_requests ALTER COLUMN corp_status DROP NOT NULL;
 
 -- Employee credential sharing permissions (admin-granted)
 CREATE TABLE IF NOT EXISTS employee_credential_permissions (

@@ -381,6 +381,7 @@ export default function CorporateDashboard() {
   const [vpReviewQueue, setVpReviewQueue] = useState<any[]>([]);
   const [sharePeerTarget, setSharePeerTarget] = useState<{ presentationId: string; email: string; note: string } | null>(null);
   const [myDidRequests, setMyDidRequests] = useState<any[]>([]);
+  const [didNotifications, setDidNotifications] = useState<any[]>([]);
   const [didIssuers, setDidIssuers] = useState<any[]>([]);
   const [didReqForm, setDidReqForm] = useState({
     issuerUserId: '',
@@ -407,6 +408,14 @@ export default function CorporateDashboard() {
       if (tab === 'credentials') {
         const data = await api.getMyCredentials(token);
         setCredentials(data.credentials || []);
+        // Load DID notifications for super_admin
+        if (subRole === 'super_admin') {
+          try {
+            const nr = await fetch('/api/corporate/did-notifications', { headers: { Authorization: `Bearer ${token}` } });
+            const nd = await nr.json();
+            setDidNotifications(nd.notifications || []);
+          } catch { /* silent */ }
+        }
       } else if (tab === 'employees') {
         const [emp, issued] = await Promise.all([api.getEmployees(token), api.getIssuedByMe(token)]);
         setEmployees(emp.employees || []);
@@ -470,6 +479,12 @@ export default function CorporateDashboard() {
         const r = await fetch('/api/mc/queue?resource_type=vp_share', { headers: { Authorization: `Bearer ${token}` } });
         const d = await r.json();
         setVpQueue(d.actions || []);
+      } else if (tab === 'did-issued') {
+        try {
+          const r = await fetch('/api/corporate/signatory/issued-dids', { headers: { Authorization: `Bearer ${token}` } });
+          const d = await r.json();
+          setDidNotifications(d.issued_dids || []);
+        } catch { /* silent */ }
       } else if (tab === 'corp-queue' || tab === 'checker-queue' || tab === 'signatory-queue') {
         const [vcR, didR] = await Promise.all([
           fetch('/api/corporate/vc-requests/queue', { headers: { Authorization: `Bearer ${token}` } }),
@@ -669,6 +684,37 @@ return (
           {/* Tab: My Credentials */}
           {tab === 'credentials' && (
             <div>
+              {/* DID Notifications panel — super_admin only */}
+              {subRole === 'super_admin' && didNotifications.length > 0 && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                    <h3 style={{ margin: 0, color: '#7c3aed' }}>🔑 DIDs Shared by Authorized Signatory</h3>
+                    <span style={{ background: '#7c3aed', color: '#fff', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>
+                      {didNotifications.length}
+                    </span>
+                  </div>
+                  <div style={{ display: 'grid', gap: '0.75rem' }}>
+                    {didNotifications.map((n: any) => (
+                      <div key={n.id} style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 10, padding: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                          <span style={{ fontWeight: 700, color: '#6d28d9', fontSize: '0.9rem' }}>🏛 DID Issued &amp; Shared</span>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{new Date(n.as_shared_to_admin_at).toLocaleString()}</span>
+                        </div>
+                        <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#1e40af', background: '#eff6ff', borderRadius: 6, padding: '0.5rem', marginBottom: '0.5rem', wordBreak: 'break-all' as const }}>
+                          {n.did_string}
+                        </div>
+                        {n.purpose && <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '0.25rem' }}>Purpose: {n.purpose}</div>}
+                        {n.signatory_name && (
+                          <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                            Shared by: <strong>{n.signatory_name}</strong> ({n.signatory_email})
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <h3>Credentials Received</h3>
               {credentials.length === 0 ? <p style={{ color: '#888' }}>No credentials yet. Submit a request to DGFT.</p> : (
                 <div style={{ display: 'grid', gap: '1rem' }}>
@@ -1724,6 +1770,74 @@ return (
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab: DID Issued — Authorized Signatory sees DIDs and shares to super_admin */}
+          {tab === 'did-issued' && (
+            <div>
+              <div style={{ marginBottom: '1.25rem' }}>
+                <h3 style={{ margin: 0, color: '#7c3aed' }}>🔑 Issued DIDs</h3>
+                <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                  DIDs issued by the government authority for requests you approved. Review and share each with the Corporate Super Admin.
+                </p>
+              </div>
+
+              {didNotifications.length === 0 ? (
+                <div className="card" style={{ padding: '3rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🔑</div>
+                  <div style={{ color: '#888' }}>No issued DIDs yet. They will appear here once the DID authority processes requests you approved.</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {didNotifications.map((d: any) => {
+                    const shared = !!d.as_shared_to_admin_at;
+                    return (
+                      <div key={d.id} className="card" style={{ border: shared ? '1px solid #bbf7d0' : '1px solid #e9d5ff', background: shared ? '#f0fdf4' : '#faf5ff' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                          <div style={{ fontWeight: 700, color: '#0f172a' }}>🏢 {d.org_name}</div>
+                          <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 700,
+                            background: shared ? '#dcfce7' : '#fef9c3', color: shared ? '#166534' : '#92400e' }}>
+                            {shared ? '✓ Shared to Admin' : '⏳ Pending Share'}
+                          </span>
+                        </div>
+
+                        <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: '#1e40af', background: '#eff6ff', borderRadius: 6, padding: '0.6rem 0.75rem', marginBottom: '0.6rem', wordBreak: 'break-all' as const }}>
+                          {d.did_string || '(DID string not available)'}
+                        </div>
+
+                        {d.purpose && <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '0.4rem' }}>Purpose: {d.purpose}</div>}
+
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: shared ? 0 : '0.75rem' }}>
+                          Issued: {new Date(d.updated_at).toLocaleString()}
+                          {shared && <span> · Shared: {new Date(d.as_shared_to_admin_at).toLocaleString()}</span>}
+                        </div>
+
+                        {!shared && (
+                          <button
+                            className="btn btn-primary"
+                            style={{ background: '#7c3aed', borderColor: '#7c3aed', width: '100%', marginTop: '0.25rem' }}
+                            onClick={async () => {
+                              try {
+                                const r = await fetch(`/api/corporate/signatory/issued-dids/${d.id}/share`, {
+                                  method: 'POST',
+                                  headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                  body: '{}',
+                                });
+                                const resp = await r.json();
+                                if (!r.ok) throw new Error(resp.error);
+                                showMsg('success', '✓ DID shared to Corporate Super Admin');
+                                loadAll();
+                              } catch (e: any) { showMsg('error', e.message); }
+                            }}>
+                            📤 Share to Corporate Super Admin
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

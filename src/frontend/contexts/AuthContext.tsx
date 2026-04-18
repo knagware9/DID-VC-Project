@@ -81,7 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   function redirectByRole(role: UserRole, subRole?: string | null) {
     setTimeout(() => {
       if (role === 'portal_manager') window.location.href = '/portal/dashboard';
-      else if (role === 'corporate' && subRole === 'authorized_signatory') window.location.href = '/corporate/signatory';
+      else if (role === 'corporate' && subRole === 'authorized_signatory') window.location.href = '/corporate/dashboard';
       else if (role === 'corporate') window.location.href = '/corporate/dashboard';
       else if (role === 'government_agency') window.location.href = '/authority/dashboard';
       else window.location.href = '/verifier/dashboard';

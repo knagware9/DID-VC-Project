@@ -1037,7 +1037,9 @@ app.post('/api/authority/did-requests/:id/issue', requireAuth, requireRole('gove
     const newDid = await createAndStoreDID(dr.org_id, 'parent', undefined, finalSlug);
 
     await query(
-      `UPDATE did_requests SET status = 'approved', created_did_id = $1, updated_at = NOW() WHERE id = $2`,
+      `UPDATE did_requests SET status = 'approved', created_did_id = $1, updated_at = NOW(),
+       as_notified_at = CASE WHEN corp_signatory_id IS NOT NULL THEN NOW() ELSE as_notified_at END
+       WHERE id = $2`,
       [newDid.id, id]
     );
 
@@ -4734,6 +4736,74 @@ app.post('/api/presentations/:id/peer-approve', requireAuth, async (req, res) =>
     await writeAuditLog('vp_peer_approved', null, null, 'VerifiablePresentation');
 
     res.json({ success: true, message: 'VP approved and submitted to verifier' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ── DID Notification: Authorized Signatory ↔ Super Admin ────────────────────
+
+// GET /api/corporate/signatory/issued-dids — AS sees DIDs issued for requests they approved
+app.get('/api/corporate/signatory/issued-dids', requireAuth, requireRole('corporate'), requireSubRole('authorized_signatory'), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const result = await query(
+      `SELECT dr.id, dr.org_id, dr.purpose, dr.request_data, dr.created_at, dr.updated_at,
+              dr.as_notified_at, dr.as_shared_to_admin_at,
+              d.did_string, ou.name as org_name, ou.email as org_email
+       FROM did_requests dr
+       LEFT JOIN dids d ON d.id = dr.created_did_id
+       JOIN users ou ON dr.org_id = ou.id
+       WHERE dr.corp_signatory_id = $1
+         AND dr.status = 'approved'
+       ORDER BY dr.updated_at DESC`,
+      [user.id]
+    );
+    res.json({ success: true, issued_dids: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/corporate/signatory/issued-dids/:id/share — AS shares issued DID to corporate super_admin
+app.post('/api/corporate/signatory/issued-dids/:id/share', requireAuth, requireRole('corporate'), requireSubRole('authorized_signatory'), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { id } = req.params;
+    const check = await query(
+      `SELECT id FROM did_requests WHERE id = $1 AND corp_signatory_id = $2 AND status = 'approved'`,
+      [id, user.id]
+    );
+    if (check.rows.length === 0) return res.status(404).json({ error: 'DID not found or not yet issued' });
+    await query(
+      `UPDATE did_requests SET as_shared_to_admin_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      [id]
+    );
+    res.json({ success: true, message: 'DID shared to Corporate Admin' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/corporate/did-notifications — super_admin sees DIDs shared by AS
+app.get('/api/corporate/did-notifications', requireAuth, requireRole('corporate'), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (user.sub_role !== 'super_admin') return res.status(403).json({ error: 'Only super_admin can view DID notifications' });
+    const orgId = user.org_id || user.id;
+    const result = await query(
+      `SELECT dr.id, dr.org_id, dr.purpose, dr.request_data, dr.created_at, dr.as_shared_to_admin_at,
+              d.did_string, sig.name as signatory_name, sig.email as signatory_email
+       FROM did_requests dr
+       LEFT JOIN dids d ON d.id = dr.created_did_id
+       LEFT JOIN users sig ON dr.corp_signatory_id = sig.id
+       WHERE dr.org_id = $1
+         AND dr.status = 'approved'
+         AND dr.as_shared_to_admin_at IS NOT NULL
+       ORDER BY dr.as_shared_to_admin_at DESC`,
+      [orgId]
+    );
+    res.json({ success: true, notifications: result.rows });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
