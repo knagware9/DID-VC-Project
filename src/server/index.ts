@@ -941,12 +941,102 @@ app.post('/api/corporate/did-requests/:id/signatory-approve', requireAuth, requi
       return res.json({ success: true, action: 'rejected' });
     }
 
-    // Forward to DID issuer (IBDIC) — flip status to 'pending' so issuer can see it
+    // Read request_data to detect org-registration DID requests
+    const dr = drResult.rows[0];
+    const rd: any = typeof dr.request_data === 'string'
+      ? JSON.parse(dr.request_data || '{}')
+      : (dr.request_data || {});
+
+    let superAdminTempPass: string | null = null;
+    let requesterTempPass: string | null = null;
+
+    if (rd.application_id) {
+      // ── Org Registration path: create corporate accounts ──────────────────
+      const appResult = await query(
+        `SELECT * FROM organization_applications WHERE id = $1 AND application_status = 'pending'`,
+        [rd.application_id]
+      );
+      if (appResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Organization application not found or already processed' });
+      }
+      const app = appResult.rows[0];
+
+      await query('BEGIN');
+      try {
+        // Find-or-create super_admin
+        let superAdminId: string;
+        const existingSA = await query('SELECT id FROM users WHERE email = $1', [app.super_admin_email]);
+        if (existingSA.rows.length > 0) {
+          superAdminId = existingSA.rows[0].id;
+        } else {
+          superAdminTempPass = crypto.randomBytes(8).toString('hex');
+          const saHash = await hashPassword(superAdminTempPass);
+          const saRes = await query(
+            `INSERT INTO users (email, password_hash, role, name, sub_role)
+             VALUES ($1, $2, 'corporate', $3, 'super_admin') RETURNING id`,
+            [app.super_admin_email, saHash, app.super_admin_name || app.company_name]
+          );
+          superAdminId = saRes.rows[0].id;
+          await query('UPDATE users SET org_id = $1 WHERE id = $1', [superAdminId]);
+        }
+
+        // Find-or-create requester
+        if (app.requester_email) {
+          const existingReq = await query('SELECT id FROM users WHERE email = $1', [app.requester_email]);
+          if (existingReq.rows.length === 0) {
+            requesterTempPass = crypto.randomBytes(8).toString('hex');
+            const reqHash = await hashPassword(requesterTempPass);
+            await query(
+              `INSERT INTO users (email, password_hash, role, name, sub_role, org_id)
+               VALUES ($1, $2, 'corporate', $3, 'requester', $4)`,
+              [app.requester_email, reqHash, app.requester_name || 'Requester', superAdminId]
+            );
+          } else {
+            await query(
+              'UPDATE users SET org_id = $1 WHERE id = $2 AND org_id IS NULL',
+              [superAdminId, existingReq.rows[0].id]
+            );
+          }
+        }
+
+        // Patch AS org_id
+        await query('UPDATE users SET org_id = $1 WHERE id = $2', [superAdminId, user.id]);
+
+        // Update did_request org_id to real super_admin (so issued-dids query finds it)
+        await query('UPDATE did_requests SET org_id = $1 WHERE id = $2', [superAdminId, id]);
+
+        // Mark org application signatory_approved
+        await query(
+          `UPDATE organization_applications
+           SET application_status = 'signatory_approved', user_id = $1, updated_at = NOW()
+           WHERE id = $2`,
+          [superAdminId, rd.application_id]
+        );
+
+        await query('COMMIT');
+        console.log(`[SIGNATORY APPROVE REG] company: ${app.company_name} | super_admin: ${app.super_admin_email}`);
+      } catch (txErr: any) {
+        await query('ROLLBACK');
+        throw txErr;
+      }
+    }
+
+    // Always: forward to DID issuer
     await query(
-      `UPDATE did_requests SET corp_status = 'signatory_approved', status = 'pending', corp_signatory_id = $1, updated_at = NOW() WHERE id = $2`,
+      `UPDATE did_requests SET corp_status = 'signatory_approved', status = 'pending',
+       corp_signatory_id = $1, updated_at = NOW() WHERE id = $2`,
       [user.id, id]
     );
-    res.json({ success: true, action: 'approved', corp_status: 'signatory_approved', status: 'pending', message: 'DID request forwarded to issuer (IBDIC) for issuance' });
+
+    res.json({
+      success: true,
+      action: 'approved',
+      corp_status: 'signatory_approved',
+      status: 'pending',
+      superAdminTempPassword: superAdminTempPass,
+      requesterTempPassword: requesterTempPass,
+      message: 'DID request forwarded to issuer for issuance',
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
