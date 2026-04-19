@@ -397,6 +397,8 @@ export default function CorporateDashboard() {
   });
   const subRole = (user as any)?.sub_role;
   const [empAccountModal, setEmpAccountModal] = useState<{ email: string; password: string } | null>(null);
+  const [viewModal, setViewModal] = useState<{ request: any; type: 'vc' | 'did' } | null>(null);
+  const [allWalletCredentials, setAllWalletCredentials] = useState<any[]>([]);
   const [orgWalletTypes, setOrgWalletTypes] = useState<string[]>([
     'IECCredential', 'MCARegistration', 'GSTINCredential', 'PANCredential', 'IBDICDigitalIdentityCredential',
   ]);
@@ -469,6 +471,7 @@ export default function CorporateDashboard() {
           if (found) vcMap[d.type] = { ...(typeof found.vc_json === 'string' ? JSON.parse(found.vc_json) : found.vc_json), id: found.id };
         });
         setWalletVCs(vcMap);
+        setAllWalletCredentials(creds);
         // Backward compatibility: legacy OrganizationIdentityCredential
         const legacy = creds.find((c: any) => c.credential_type === 'OrganizationIdentityCredential');
         setLegacyVC(legacy ? (typeof legacy.vc_json === 'string' ? JSON.parse(legacy.vc_json) : legacy.vc_json) : null);
@@ -814,7 +817,7 @@ return (
                               ✓ Portal Access
                             </span>
                           ) : (
-                            ['super_admin', 'admin'].includes(subRole) && (
+                            ['super_admin', 'admin', 'maker', 'checker'].includes(subRole) && (
                               <button
                                 className="btn btn-sm"
                                 style={{ background: '#1a56db', color: '#fff', border: 'none', fontSize: '0.72rem', padding: '4px 10px', cursor: 'pointer', borderRadius: 6, whiteSpace: 'nowrap' }}
@@ -1340,6 +1343,45 @@ return (
                 </div>
               )}
 
+              {/* All Other Issued Credentials (non-DIA types) */}
+              {(() => {
+                const diaTypes = new Set(DIA_CONFIG.map(d => d.type));
+                const otherCreds = allWalletCredentials.filter(c => !diaTypes.has(c.credential_type) && c.credential_type !== 'OrganizationIdentityCredential' && !c.revoked);
+                if (otherCreds.length === 0) return null;
+                return (
+                  <div style={{ marginTop: '1.5rem' }}>
+                    <h4 style={{ marginBottom: '0.75rem', color: '#334155' }}>Other Issued Credentials</h4>
+                    <div style={{ display: 'grid', gap: '0.75rem' }}>
+                      {otherCreds.map((c: any) => (
+                        <div key={c.id} className="card" style={{ padding: '1rem', border: '1px solid #e2e8f0' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{c.credential_type}</span>
+                              <span style={{ marginLeft: 8, background: '#d1fae5', color: '#065f46', padding: '2px 8px', borderRadius: 12, fontSize: '0.7rem', fontWeight: 600 }}>✓ Issued</span>
+                            </div>
+                            <span style={{ fontSize: '0.75rem', color: '#888' }}>{new Date(c.issued_at).toLocaleDateString()}</span>
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.35rem' }}>
+                            Issuer: <code style={{ fontSize: '0.75rem' }}>{c.issuer_did_string?.slice(0, 50) || 'Unknown'}...</code>
+                          </div>
+                          {c.expires_at && <div style={{ fontSize: '0.75rem', color: '#888' }}>Expires: {new Date(c.expires_at).toLocaleDateString()}</div>}
+                          <div style={{ marginTop: '0.5rem' }}>
+                            <BlockchainBadge txHash={c.polygon_tx_hash} blockNumber={c.polygon_block_number} />
+                          </div>
+                          <button
+                            className="btn btn-sm"
+                            style={{ background: '#1a56db', color: '#fff', border: 'none', marginTop: '0.5rem', fontSize: '0.75rem' }}
+                            onClick={() => setLedgerCredId(c.id)}
+                          >
+                            ⛓ View on Ledger
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {subRole === 'maker' && (
                 <div className="card" style={{ padding: '1.25rem', marginTop: '1rem' }}>
                   <h4 style={{ marginBottom: '0.75rem' }}>Create VP Draft for Checker Approval</h4>
@@ -1596,6 +1638,10 @@ return (
                           Submitted by: <strong>{r.requester_name || r.requester_email}</strong>
                         </div>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                          <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem' }}
+                            onClick={() => setViewModal({ request: r, type: 'vc' })}>
+                            👁 View Details
+                          </button>
                           <button className="btn btn-primary btn-sm" style={{ fontSize: '0.82rem' }}
                             onClick={() => handleCorpAction(r.id, 'vc', stageEndpoint, 'approve')}>
                             ✓ Approve → Checker
@@ -1614,31 +1660,39 @@ return (
                   <div className="card" style={{ padding: '1.5rem', textAlign: 'center', color: '#888' }}>No DID requests pending your review</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {didQueue.map((r: any) => (
-                      <div key={r.id} className="card" style={{ padding: '1rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div>
-                            <span style={{ fontWeight: 700 }}>🔑 DID Creation Request</span>
-                            <span style={{ marginLeft: 8, fontSize: '0.72rem', background: '#e0e7ff', color: '#3730a3', padding: '2px 7px', borderRadius: 12 }}>From Requester</span>
+                    {didQueue.map((r: any) => {
+                      const rd = typeof r.request_data === 'string' ? JSON.parse(r.request_data || '{}') : (r.request_data || {});
+                      return (
+                        <div key={r.id} className="card" style={{ padding: '1rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                              <span style={{ fontWeight: 700 }}>🔑 {rd.orgName || 'DID Creation Request'}</span>
+                              <span style={{ marginLeft: 8, fontSize: '0.72rem', background: '#e0e7ff', color: '#3730a3', padding: '2px 7px', borderRadius: 12 }}>From Requester</span>
+                            </div>
+                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(r.created_at).toLocaleString()}</span>
                           </div>
-                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(r.created_at).toLocaleString()}</span>
+                          {rd.cin && <div style={{ fontSize: '0.75rem', color: '#64748b', margin: '2px 0', fontFamily: 'monospace' }}>CIN: {rd.cin} {rd.entityType && `· ${rd.entityType}`}</div>}
+                          {r.purpose && <div style={{ fontSize: '0.82rem', color: '#555', margin: '4px 0' }}>Purpose: {r.purpose}</div>}
+                          <div style={{ fontSize: '0.8rem', color: '#64748b', margin: '4px 0' }}>
+                            Submitted by: <strong>{r.requester_name || r.requester_email}</strong>
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                            <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem' }}
+                              onClick={() => setViewModal({ request: r, type: 'did' })}>
+                              👁 View Details
+                            </button>
+                            <button className="btn btn-primary btn-sm" style={{ fontSize: '0.82rem' }}
+                              onClick={() => handleCorpAction(r.id, 'did', 'maker-review', 'approve')}>
+                              ✓ Approve → Checker
+                            </button>
+                            <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem', color: '#dc2626' }}
+                              onClick={() => handleCorpReject(r.id, 'did', 'maker-review')}>
+                              ✗ Reject
+                            </button>
+                          </div>
                         </div>
-                        {r.purpose && <div style={{ fontSize: '0.82rem', color: '#555', margin: '4px 0' }}>Purpose: {r.purpose}</div>}
-                        <div style={{ fontSize: '0.8rem', color: '#64748b', margin: '4px 0' }}>
-                          Submitted by: <strong>{r.requester_name || r.requester_email}</strong>
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                          <button className="btn btn-primary btn-sm" style={{ fontSize: '0.82rem' }}
-                            onClick={() => handleCorpAction(r.id, 'did', 'maker-review', 'approve')}>
-                            ✓ Approve → Checker
-                          </button>
-                          <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem', color: '#dc2626' }}
-                            onClick={() => handleCorpReject(r.id, 'did', 'maker-review')}>
-                            ✗ Reject
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1671,9 +1725,13 @@ return (
                         {r.corp_reviewer_name && <> · Reviewed by: <strong>{r.corp_reviewer_name}</strong></>}
                       </div>
                       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem' }}
+                          onClick={() => setViewModal({ request: r, type: 'vc' })}>
+                          👁 View Details
+                        </button>
                         <button className="btn btn-primary btn-sm" style={{ fontSize: '0.82rem' }}
                           onClick={() => handleCorpAction(r.id, 'vc', 'checker-approve', 'approve')}>
-                          ✓ Approve → Signatory
+                          ✓ Approve & Submit to Issuer
                         </button>
                         <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem', color: '#dc2626' }}
                           onClick={() => handleCorpReject(r.id, 'vc', 'checker-approve')}>
@@ -1689,105 +1747,95 @@ return (
                 <div className="card" style={{ padding: '1.5rem', textAlign: 'center', color: '#888' }}>No DID requests pending checker approval</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {didQueue.map((r: any) => (
-                    <div key={r.id} className="card" style={{ padding: '1rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <span style={{ fontWeight: 700 }}>🔑 DID Creation Request</span>
-                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(r.created_at).toLocaleString()}</span>
+                  {didQueue.map((r: any) => {
+                    const rd = typeof r.request_data === 'string' ? JSON.parse(r.request_data || '{}') : (r.request_data || {});
+                    return (
+                      <div key={r.id} className="card" style={{ padding: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <span style={{ fontWeight: 700 }}>🔑 {rd.orgName || 'DID Creation Request'}</span>
+                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(r.created_at).toLocaleString()}</span>
+                        </div>
+                        {rd.cin && <div style={{ fontSize: '0.75rem', color: '#64748b', margin: '2px 0', fontFamily: 'monospace' }}>CIN: {rd.cin} {rd.entityType && `· ${rd.entityType}`}</div>}
+                        {r.purpose && <div style={{ fontSize: '0.82rem', color: '#555', margin: '4px 0' }}>Purpose: {r.purpose}</div>}
+                        <div style={{ fontSize: '0.8rem', color: '#64748b', margin: '4px 0' }}>
+                          Requester: <strong>{r.requester_name}</strong>
+                          {r.corp_reviewer_name && <> · Maker: <strong>{r.corp_reviewer_name}</strong></>}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                          <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem' }}
+                            onClick={() => setViewModal({ request: r, type: 'did' })}>
+                            👁 View Details
+                          </button>
+                          <button className="btn btn-primary btn-sm" style={{ fontSize: '0.82rem' }}
+                            onClick={() => handleCorpAction(r.id, 'did', 'checker-approve', 'approve')}>
+                            ✓ Approve → Signatory
+                          </button>
+                          <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem', color: '#dc2626' }}
+                            onClick={() => handleCorpReject(r.id, 'did', 'checker-approve')}>
+                            ✗ Reject
+                          </button>
+                        </div>
                       </div>
-                      {r.purpose && <div style={{ fontSize: '0.82rem', color: '#555', margin: '4px 0' }}>Purpose: {r.purpose}</div>}
-                      <div style={{ fontSize: '0.8rem', color: '#64748b', margin: '4px 0' }}>
-                        Requester: <strong>{r.requester_name}</strong>
-                        {r.corp_reviewer_name && <> · Maker: <strong>{r.corp_reviewer_name}</strong></>}
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                        <button className="btn btn-primary btn-sm" style={{ fontSize: '0.82rem' }}
-                          onClick={() => handleCorpAction(r.id, 'did', 'checker-approve', 'approve')}>
-                          ✓ Approve → Signatory
-                        </button>
-                        <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem', color: '#dc2626' }}
-                          onClick={() => handleCorpReject(r.id, 'did', 'checker-approve')}>
-                          ✗ Reject
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
           )}
 
-          {/* Tab: Authorized Signatory Queue */}
+          {/* Tab: Authorized Signatory Queue — DID Requests only (VC goes directly after checker) */}
           {tab === 'signatory-queue' && (
             <div>
-              <h3 style={{ marginBottom: 4 }}>Sign & Submit <span style={{ fontSize: '0.8rem', background: '#ede9fe', color: '#4c1d95', padding: '2px 8px', borderRadius: 12, marginLeft: 8 }}>{corpQueue.length} awaiting signature</span></h3>
+              <h3 style={{ marginBottom: 4 }}>Sign & Submit — DID Requests <span style={{ fontSize: '0.8rem', background: '#ede9fe', color: '#4c1d95', padding: '2px 8px', borderRadius: 12, marginLeft: 8 }}>{didQueue.length} awaiting signature</span></h3>
               <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-                Final corporate approval. Signing submits the request directly to the issuer (government authority).
+                Final corporate approval for DID creation. Signing forwards the request to the DID Authority (IBDIC) for issuance.
               </p>
               <div className="card" style={{ background: '#fef3c7', border: '1px solid #f59e0b', padding: '0.6rem 1rem', marginBottom: '1rem', fontSize: '0.82rem', color: '#92400e' }}>
-                ⚠️ <strong>Important:</strong> Approving will submit the request to the external issuer. This action cannot be undone.
+                ⚠️ <strong>Important:</strong> Approving will forward the DID request to the issuer authority. This action cannot be undone.
               </div>
-              <h4 style={{ marginBottom: 8, color: '#334155' }}>VC / Credential Requests</h4>
-              {corpQueue.length === 0 ? (
-                <div className="card" style={{ padding: '1.5rem', textAlign: 'center', color: '#888', marginBottom: '1rem' }}>No requests awaiting your signature</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                  {corpQueue.map((r: any) => (
-                    <div key={r.id} className="card" style={{ padding: '1rem', border: '2px solid #7c3aed20' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <span style={{ fontWeight: 700 }}>{r.credential_type}</span>
-                          <span style={{ marginLeft: 8, fontSize: '0.72rem', background: '#ede9fe', color: '#4c1d95', padding: '2px 7px', borderRadius: 12 }}>Checker Approved</span>
-                        </div>
-                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(r.created_at).toLocaleString()}</span>
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: '#64748b', margin: '4px 0' }}>
-                        Requester: <strong>{r.requester_name || r.requester_email}</strong>
-                        {r.corp_reviewer_name && <> · Maker: <strong>{r.corp_reviewer_name}</strong></>}
-                        {r.corp_checker_name && <> · Checker: <strong>{r.corp_checker_name}</strong></>}
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                        <button className="btn btn-primary btn-sm" style={{ fontSize: '0.82rem', background: '#7c3aed', borderColor: '#7c3aed' }}
-                          onClick={() => handleCorpAction(r.id, 'vc', 'signatory-approve', 'approve')}>
-                          ✍️ Sign & Submit to Issuer
-                        </button>
-                        <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem', color: '#dc2626' }}
-                          onClick={() => handleCorpReject(r.id, 'vc', 'signatory-approve')}>
-                          ✗ Reject
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <h4 style={{ marginBottom: 8, color: '#334155' }}>DID Requests</h4>
               {didQueue.length === 0 ? (
                 <div className="card" style={{ padding: '1.5rem', textAlign: 'center', color: '#888' }}>No DID requests awaiting your signature</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {didQueue.map((r: any) => (
-                    <div key={r.id} className="card" style={{ padding: '1rem', border: '2px solid #7c3aed20' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <span style={{ fontWeight: 700 }}>🔑 DID Creation Request</span>
-                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(r.created_at).toLocaleString()}</span>
+                  {didQueue.map((r: any) => {
+                    const rd = typeof r.request_data === 'string' ? JSON.parse(r.request_data || '{}') : (r.request_data || {});
+                    return (
+                      <div key={r.id} className="card" style={{ padding: '1rem', border: '2px solid #7c3aed20' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div>
+                            <span style={{ fontWeight: 700 }}>🔑 {rd.orgName || 'DID Creation Request'}</span>
+                            <span style={{ marginLeft: 8, fontSize: '0.72rem', background: '#ede9fe', color: '#4c1d95', padding: '2px 7px', borderRadius: 12 }}>Checker Approved</span>
+                          </div>
+                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(r.created_at).toLocaleString()}</span>
+                        </div>
+                        {rd.cin && (
+                          <div style={{ fontSize: '0.75rem', color: '#64748b', margin: '2px 0', fontFamily: 'monospace' }}>
+                            CIN: {rd.cin} {rd.entityType && `· ${rd.entityType}`}
+                          </div>
+                        )}
+                        {r.purpose && <div style={{ fontSize: '0.82rem', color: '#555', margin: '4px 0' }}>Purpose: {r.purpose}</div>}
+                        <div style={{ fontSize: '0.8rem', color: '#64748b', margin: '4px 0' }}>
+                          Requester: <strong>{r.requester_name}</strong>
+                          {r.corp_reviewer_name && <> · Maker: <strong>{r.corp_reviewer_name}</strong></>}
+                          {r.corp_checker_name && <> · Checker: <strong>{r.corp_checker_name}</strong></>}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                          <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem' }}
+                            onClick={() => setViewModal({ request: r, type: 'did' })}>
+                            👁 View Details
+                          </button>
+                          <button className="btn btn-primary btn-sm" style={{ fontSize: '0.82rem', background: '#7c3aed', borderColor: '#7c3aed' }}
+                            onClick={() => handleCorpAction(r.id, 'did', 'signatory-approve', 'approve')}>
+                            ✍️ Sign & Forward to IBDIC
+                          </button>
+                          <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem', color: '#dc2626' }}
+                            onClick={() => handleCorpReject(r.id, 'did', 'signatory-approve')}>
+                            ✗ Reject
+                          </button>
+                        </div>
                       </div>
-                      {r.purpose && <div style={{ fontSize: '0.82rem', color: '#555', margin: '4px 0' }}>Purpose: {r.purpose}</div>}
-                      <div style={{ fontSize: '0.8rem', color: '#64748b', margin: '4px 0' }}>
-                        Requester: <strong>{r.requester_name}</strong>
-                        {r.corp_checker_name && <> · Checker: <strong>{r.corp_checker_name}</strong></>}
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                        <button className="btn btn-primary btn-sm" style={{ fontSize: '0.82rem', background: '#7c3aed', borderColor: '#7c3aed' }}
-                          onClick={() => handleCorpAction(r.id, 'did', 'signatory-approve', 'approve')}>
-                          ✍️ Sign & Create DID
-                        </button>
-                        <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem', color: '#dc2626' }}
-                          onClick={() => handleCorpReject(r.id, 'did', 'signatory-approve')}>
-                          ✗ Reject
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1861,10 +1909,10 @@ return (
             </div>
           )}
 
-          {/* VP Review Tab — Employee 2 reviews VPs shared by colleague */}
+          {/* Checker Review Tab — Employee 2 reviews VPs shared by colleague */}
           {tab === 'vp-review' && (
             <div>
-              <h3 style={{ marginBottom: '0.25rem' }}>VP Peer Review Queue</h3>
+              <h3 style={{ marginBottom: '0.25rem' }}>Checker Review Queue</h3>
               <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
                 Presentations shared to you by a colleague for internal approval before submission to the verifier.
               </p>
@@ -2018,6 +2066,57 @@ return (
             </div>
           )}
         </>
+      )}
+
+      {/* View Request Details Modal */}
+      {viewModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="card" style={{ width: 540, maxHeight: '80vh', overflow: 'auto', padding: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ margin: 0 }}>
+                {viewModal.type === 'did' ? '🔑 DID Request Details' : '📄 VC Request Details'}
+              </h3>
+              <button onClick={() => setViewModal(null)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#64748b' }}>×</button>
+            </div>
+            {viewModal.type === 'vc' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Credential Type</span><div style={{ fontWeight: 700 }}>{viewModal.request.credential_type}</div></div>
+                <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Submitted By</span><div>{viewModal.request.requester_name} ({viewModal.request.requester_email})</div></div>
+                {viewModal.request.corp_reviewer_name && <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Reviewed By (Maker)</span><div>{viewModal.request.corp_reviewer_name}</div></div>}
+                {viewModal.request.corp_checker_name && <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Approved By (Checker)</span><div>{viewModal.request.corp_checker_name}</div></div>}
+                <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Submitted At</span><div>{new Date(viewModal.request.created_at).toLocaleString()}</div></div>
+                <div>
+                  <span style={{ color: '#64748b', fontSize: '0.8rem' }}>Request Data</span>
+                  <pre style={{ background: '#f8fafc', borderRadius: 6, padding: '0.75rem', fontSize: '0.78rem', overflow: 'auto', marginTop: 4, maxHeight: 200 }}>
+                    {JSON.stringify(typeof viewModal.request.request_data === 'string' ? JSON.parse(viewModal.request.request_data || '{}') : (viewModal.request.request_data || {}), null, 2)}
+                  </pre>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {(() => {
+                  const rd = typeof viewModal.request.request_data === 'string' ? JSON.parse(viewModal.request.request_data || '{}') : (viewModal.request.request_data || {});
+                  return (
+                    <>
+                      {rd.orgName && <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Organisation Name</span><div style={{ fontWeight: 700 }}>{rd.orgName}</div></div>}
+                      {rd.cin && <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>CIN</span><div style={{ fontFamily: 'monospace' }}>{rd.cin}</div></div>}
+                      {rd.entityType && <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Entity Type</span><div>{rd.entityType}</div></div>}
+                      {viewModal.request.purpose && <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Purpose</span><div>{viewModal.request.purpose}</div></div>}
+                      {rd.superAdminName && <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Super Admin</span><div>{rd.superAdminName} ({rd.superAdminEmail})</div></div>}
+                      {rd.contactPerson && <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Contact Person</span><div>{rd.contactPerson} ({rd.contactEmail})</div></div>}
+                      {rd.additionalNotes && <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Additional Notes</span><div style={{ fontStyle: 'italic', color: '#555' }}>{rd.additionalNotes}</div></div>}
+                      <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Submitted By</span><div>{viewModal.request.requester_name} ({viewModal.request.requester_email})</div></div>
+                      {viewModal.request.corp_reviewer_name && <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Reviewed By (Maker)</span><div>{viewModal.request.corp_reviewer_name}</div></div>}
+                      {viewModal.request.corp_checker_name && <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Approved By (Checker)</span><div>{viewModal.request.corp_checker_name}</div></div>}
+                      <div><span style={{ color: '#64748b', fontSize: '0.8rem' }}>Submitted At</span><div>{new Date(viewModal.request.created_at).toLocaleString()}</div></div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+            <button className="btn btn-secondary" style={{ width: '100%', marginTop: '1.25rem' }} onClick={() => setViewModal(null)}>Close</button>
+          </div>
+        </div>
       )}
 
       {/* Employee Account Created Modal */}

@@ -85,7 +85,7 @@ export default function AuthorityDashboard() {
     if (view === 'checker-queue') loadMCQueue();
     if (view === 'issued') loadIssued();
     if (view === 'team') loadTeam();
-    if (view === 'corp-applications') loadCorpApplications();
+    if (view === 'corp-applications' || view === 'did-applications') loadCorpApplications();
   }, [view]);
 
   async function loadVcRequests() {
@@ -765,12 +765,12 @@ export default function AuthorityDashboard() {
         </>
       )}
 
-      {/* ── Corp Applications (role-aware: maker / checker / super_admin) ── */}
-      {view === 'corp-applications' && (
+      {/* ── DID Applications (role-aware: maker / checker / super_admin) ── */}
+      {(view === 'corp-applications' || view === 'did-applications') && (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
             <h2 style={{ margin: 0 }}>
-              {subRole === 'maker' ? 'Corporate Applications — Awaiting Review' : 'Corporate Applications — Ready to Issue'}
+              {subRole === 'maker' ? 'DID Applications — Awaiting Review' : 'DID Applications — Ready to Issue'}
             </h2>
           </div>
 

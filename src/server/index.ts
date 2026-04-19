@@ -477,10 +477,11 @@ app.post('/api/vc-requests', requireAuth, requireRole('corporate'), async (req, 
       }
     }
 
-    // Requesters start internal approval flow (draft); everyone else submits directly to issuer
-    const isRequester = user.sub_role === 'requester';
-    const initialStatus     = isRequester ? 'draft'     : 'pending';
-    const initialCorpStatus = isRequester ? 'submitted' : null;
+    // Maker submits → internal flow (maker-reviewed by default since they are the maker, needs checker approval)
+    // Super_admin submits directly to issuer
+    const isMaker = user.sub_role === 'maker';
+    const initialStatus     = isMaker ? 'draft'           : 'pending';
+    const initialCorpStatus = isMaker ? 'maker_reviewed'  : null;
 
     const result = await query(
       `INSERT INTO vc_requests (requester_user_id, requester_did_id, issuer_user_id, credential_type, request_data, status, corp_status)
@@ -641,7 +642,7 @@ app.post('/api/corporate/vc-requests/:id/maker-review', requireAuth, requireRole
   }
 });
 
-// POST /api/corporate/vc-requests/:id/checker-approve — checker approves maker_reviewed request
+// POST /api/corporate/vc-requests/:id/checker-approve — checker approves and submits directly to issuer
 app.post('/api/corporate/vc-requests/:id/checker-approve', requireAuth, requireRole('corporate'), async (req, res) => {
   try {
     const user = (req as any).user;
@@ -669,11 +670,13 @@ app.post('/api/corporate/vc-requests/:id/checker-approve', requireAuth, requireR
       );
       return res.json({ success: true, action: 'rejected' });
     }
+    // Checker approval: submit directly to issuer (set status='pending' so issuer can process it)
     await query(
-      `UPDATE vc_requests SET corp_status = 'checker_approved', corp_checker_id = $1, updated_at = NOW() WHERE id = $2`,
+      `UPDATE vc_requests SET corp_status = 'checker_approved', corp_checker_id = $1,
+        status = 'pending', updated_at = NOW() WHERE id = $2`,
       [user.id, id]
     );
-    res.json({ success: true, action: 'approved', corp_status: 'checker_approved' });
+    res.json({ success: true, action: 'approved', corp_status: 'checker_approved', status: 'pending' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -4629,12 +4632,22 @@ app.post('/api/presentations/:id/share-to-peer', requireAuth, async (req, res) =
 
     if (!peerEmail) return res.status(400).json({ error: 'peerEmail is required' });
 
-    // Validate the presentation belongs to this user
+    // Validate the presentation belongs to this user.
+    // Employees hold a sub-DID (linked via employee_registry, not dids.user_id),
+    // so we check both direct DID ownership and sub-DID ownership.
     const presResult = await query(
       `SELECT p.id, p.holder_did_id, p.verifier_request_id, p.internal_status
        FROM presentations p
-       JOIN dids d ON p.holder_did_id = d.id
-       WHERE p.id = $1 AND d.user_id = $2`,
+       WHERE p.id = $1
+         AND (
+           p.holder_did_id IN (SELECT id FROM dids WHERE user_id = $2)
+           OR
+           p.holder_did_id IN (
+             SELECT d.id FROM dids d
+             JOIN employee_registry er ON d.id = er.sub_did_id
+             WHERE er.user_id = $2
+           )
+         )`,
       [id, user.id]
     );
     if (presResult.rows.length === 0) {
@@ -4743,21 +4756,22 @@ app.post('/api/presentations/:id/peer-approve', requireAuth, async (req, res) =>
 
 // ── DID Notification: Authorized Signatory ↔ Super Admin ────────────────────
 
-// GET /api/corporate/signatory/issued-dids — AS sees DIDs issued for requests they approved
+// GET /api/corporate/signatory/issued-dids — AS sees all approved DIDs for their org
 app.get('/api/corporate/signatory/issued-dids', requireAuth, requireRole('corporate'), requireSubRole('authorized_signatory'), async (req, res) => {
   try {
     const user = (req as any).user;
+    const orgOwner = user.org_id || user.id; // authorized_signatory's org is their org_id
     const result = await query(
       `SELECT dr.id, dr.org_id, dr.purpose, dr.request_data, dr.created_at, dr.updated_at,
-              dr.as_notified_at, dr.as_shared_to_admin_at,
+              dr.as_notified_at, dr.as_shared_to_admin_at, dr.corp_signatory_id,
               d.did_string, ou.name as org_name, ou.email as org_email
        FROM did_requests dr
        LEFT JOIN dids d ON d.id = dr.created_did_id
        JOIN users ou ON dr.org_id = ou.id
-       WHERE dr.corp_signatory_id = $1
+       WHERE dr.org_id = $1
          AND dr.status = 'approved'
        ORDER BY dr.updated_at DESC`,
-      [user.id]
+      [orgOwner]
     );
     res.json({ success: true, issued_dids: result.rows });
   } catch (error: any) {
@@ -4770,9 +4784,10 @@ app.post('/api/corporate/signatory/issued-dids/:id/share', requireAuth, requireR
   try {
     const user = (req as any).user;
     const { id } = req.params;
+    const orgOwner = user.org_id || user.id;
     const check = await query(
-      `SELECT id FROM did_requests WHERE id = $1 AND corp_signatory_id = $2 AND status = 'approved'`,
-      [id, user.id]
+      `SELECT id FROM did_requests WHERE id = $1 AND org_id = $2 AND status = 'approved'`,
+      [id, orgOwner]
     );
     if (check.rows.length === 0) return res.status(404).json({ error: 'DID not found or not yet issued' });
     await query(
