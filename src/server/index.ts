@@ -748,8 +748,12 @@ app.post('/api/corporate/did-requests', requireAuth, requireRole('corporate'), a
     }
 
     const isRequester = user.sub_role === 'requester';
-    const initialStatus = isRequester ? 'draft' : 'pending';
-    const initialCorpStatus = isRequester ? 'submitted' : null;
+    const isSuperAdmin = user.sub_role === 'super_admin';
+    // Requester: full flow (maker → checker → AS)
+    // Super admin: skip maker/checker but AS must still sign before issuer sees it
+    // Other roles: should not reach here via normal nav, default to pending
+    const initialStatus = (isRequester || isSuperAdmin) ? 'draft' : 'pending';
+    const initialCorpStatus: string | null = isRequester ? 'submitted' : (isSuperAdmin ? 'checker_approved' : null);
 
     const result = await query(
       `INSERT INTO did_requests (requester_user_id, org_id, request_data, purpose, issuer_user_id, status, corp_status)
@@ -766,7 +770,22 @@ app.post('/api/corporate/did-requests', requireAuth, requireRole('corporate'), a
 app.get('/api/corporate/did-requests/queue', requireAuth, requireRole('corporate'), async (req, res) => {
   try {
     const user = (req as any).user;
-    const orgOwner = orgDIDOwner(user);
+    // Resolve orgOwner: for AS users created during registration, org_id may be NULL.
+    // Fall back to looking up the super_admin via the organization_applications table.
+    let orgOwner: string = user.org_id || user.id;
+    if (!user.org_id && user.sub_role !== 'super_admin') {
+      const appRow = await query(
+        `SELECT u.id as super_admin_id FROM organization_applications oa
+         JOIN users u ON u.email = oa.super_admin_email AND u.sub_role = 'super_admin'
+         WHERE oa.signatory_user_id = $1 LIMIT 1`,
+        [user.id]
+      );
+      if (appRow.rows.length > 0) {
+        orgOwner = appRow.rows[0].super_admin_id;
+        // Patch the missing org_id so future calls are fast
+        await query(`UPDATE users SET org_id = $1 WHERE id = $2`, [orgOwner, user.id]);
+      }
+    }
     const stageMap: Record<string, string> = {
       maker:                'submitted',
       checker:              'maker_reviewed',
@@ -889,7 +908,20 @@ app.post('/api/corporate/did-requests/:id/signatory-approve', requireAuth, requi
     }
     const { id } = req.params;
     const { decision, rejection_reason } = req.body;
-    const orgOwner = orgDIDOwner(user);
+    // Resolve orgOwner with fallback for AS users whose org_id was not patched at registration
+    let orgOwner: string = orgDIDOwner(user);
+    if (!user.org_id && user.sub_role === 'authorized_signatory') {
+      const appRow = await query(
+        `SELECT u.id as super_admin_id FROM organization_applications oa
+         JOIN users u ON u.email = oa.super_admin_email AND u.sub_role = 'super_admin'
+         WHERE oa.signatory_user_id = $1 LIMIT 1`,
+        [user.id]
+      );
+      if (appRow.rows.length > 0) {
+        orgOwner = appRow.rows[0].super_admin_id;
+        await query(`UPDATE users SET org_id = $1 WHERE id = $2`, [orgOwner, user.id]);
+      }
+    }
     const drResult = await query(
       `SELECT dr.*, u.email as requester_email
        FROM did_requests dr
@@ -2733,6 +2765,24 @@ app.post('/api/organizations/apply',
           ]
         );
 
+        // Create did_request so the AS sees it in their Sign & Submit tab immediately
+        await query(
+          `INSERT INTO did_requests
+             (requester_user_id, org_id, status, corp_status, corp_signatory_id,
+              issuer_user_id, purpose, request_data)
+           VALUES ($1, $1, 'draft', 'checker_approved', $1, $2,
+                   'Corporate DID Registration', $3)`,
+          [
+            signatoryUserId,
+            assigned_issuer_id,
+            JSON.stringify({
+              application_id: result.rows[0].id,
+              company_name: company_name,
+              cin: cin,
+            }),
+          ]
+        );
+
         await query('COMMIT', []);
         console.log(`[SUBMITTED] signatory: ${signatory_email} | password: ${signatoryTempPass}`);
 
@@ -2774,23 +2824,86 @@ app.get('/api/corporate/signatory/applications', requireAuth, requireRole('corpo
 });
 
 // POST /api/corporate/signatory/applications/:id/approve
+// When AS approves the application, immediately create corporate user accounts
+// so the requester can log in and submit a DID request right away.
 app.post('/api/corporate/signatory/applications/:id/approve', requireAuth, requireRole('corporate'), requireSubRole('authorized_signatory'), async (req, res) => {
   try {
     const user = (req as any).user;
     const { id } = req.params;
-    const appCheck = await query(
-      `SELECT id FROM organization_applications
+    const appResult = await query(
+      `SELECT * FROM organization_applications
        WHERE id = $1 AND signatory_user_id = $2 AND application_status = 'pending'`,
       [id, user.id]
     );
-    if (appCheck.rows.length === 0) {
+    if (appResult.rows.length === 0) {
       return res.status(404).json({ error: 'Application not found or not in pending state' });
     }
-    await query(
-      `UPDATE organization_applications SET application_status = 'signatory_approved' WHERE id = $1`,
-      [id]
-    );
-    res.json({ success: true });
+    const app = appResult.rows[0];
+
+    await query('BEGIN');
+    try {
+      // Create super_admin user if not already exists
+      let superAdminId: string;
+      let superAdminTempPass: string | null = null;
+      let requesterTempPass: string | null = null;
+
+      const existingSA = await query('SELECT id FROM users WHERE email = $1', [app.super_admin_email]);
+      if (existingSA.rows.length > 0) {
+        superAdminId = existingSA.rows[0].id;
+      } else {
+        superAdminTempPass = crypto.randomBytes(8).toString('hex');
+        const saHash = await hashPassword(superAdminTempPass);
+        const saResult = await query(
+          `INSERT INTO users (email, password_hash, role, name, sub_role)
+           VALUES ($1, $2, 'corporate', $3, 'super_admin') RETURNING id`,
+          [app.super_admin_email, saHash, app.super_admin_name || app.company_name]
+        );
+        superAdminId = saResult.rows[0].id;
+        // super_admin owns its own org scope
+        await query('UPDATE users SET org_id = $1 WHERE id = $1', [superAdminId]);
+      }
+
+      // Create requester user if email provided and not already exists
+      if (app.requester_email) {
+        const existingReq = await query('SELECT id FROM users WHERE email = $1', [app.requester_email]);
+        if (existingReq.rows.length === 0) {
+          requesterTempPass = crypto.randomBytes(8).toString('hex');
+          const reqHash = await hashPassword(requesterTempPass);
+          await query(
+            `INSERT INTO users (email, password_hash, role, name, sub_role, org_id)
+             VALUES ($1, $2, 'corporate', $3, 'requester', $4)`,
+            [app.requester_email, reqHash, app.requester_name || 'Requester', superAdminId]
+          );
+        } else {
+          await query('UPDATE users SET org_id = $1 WHERE id = $2 AND org_id IS NULL', [superAdminId, existingReq.rows[0].id]);
+        }
+      }
+
+      // Patch signatory org_id so they can see their org's DID requests
+      await query('UPDATE users SET org_id = $1 WHERE id = $2', [superAdminId, user.id]);
+
+      // Update application status
+      await query(
+        `UPDATE organization_applications
+         SET application_status = 'signatory_approved', user_id = $1, updated_at = NOW()
+         WHERE id = $2`,
+        [superAdminId, id]
+      );
+
+      await query('COMMIT');
+
+      console.log(`[SIGNATORY APPROVE] Org: ${app.company_name} | super_admin: ${app.super_admin_email} | pass: ${superAdminTempPass} | requester: ${app.requester_email} | pass: ${requesterTempPass}`);
+
+      res.json({
+        success: true,
+        superAdminTempPassword: superAdminTempPass,
+        requesterTempPassword: requesterTempPass,
+        message: `Application approved. Corporate accounts created for ${app.company_name}.`,
+      });
+    } catch (innerError: any) {
+      await query('ROLLBACK');
+      throw innerError;
+    }
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -3965,6 +4078,156 @@ app.get('/api/portal/organizations', requireAuth, requireRole('portal_manager' a
   }
 });
 
+// Portal Manager: list corporate applications (pending + all statuses)
+app.get('/api/portal/corporate-applications', requireAuth, requireRole('portal_manager' as any), async (req, res) => {
+  try {
+    const status = req.query.status as string;
+    const where = status ? `WHERE oa.application_status = $1` : '';
+    const params = status ? [status] : [];
+    const rows = await query(
+      `SELECT oa.id, oa.org_name, oa.company_name, oa.cin, oa.pan_number, oa.gstn,
+              oa.super_admin_name, oa.super_admin_email,
+              oa.requester_name, oa.requester_email,
+              oa.signatory_name, oa.signatory_email, oa.signatory_user_id,
+              oa.application_status, oa.rejection_reason,
+              oa.state, oa.date_of_incorporation, oa.director_full_name, oa.designation,
+              oa.created_at, oa.updated_at,
+              u.name as super_admin_exists
+       FROM organization_applications oa
+       LEFT JOIN users u ON u.email = oa.super_admin_email AND u.sub_role = 'super_admin'
+       ${where}
+       ORDER BY oa.created_at DESC`,
+      params
+    );
+    res.json({ success: true, applications: rows.rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Portal Manager: approve a corporate application — creates super_admin + requester, patches signatory org_id
+app.post('/api/portal/corporate-applications/:id/approve', requireAuth, requireRole('portal_manager' as any), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!['super_admin', 'maker', 'checker'].includes(user.sub_role)) {
+      return res.status(403).json({ error: 'Only portal_manager super_admin/maker/checker can approve' });
+    }
+
+    const { id } = req.params;
+    const appResult = await query('SELECT * FROM organization_applications WHERE id = $1', [id]);
+    if (appResult.rows.length === 0) return res.status(404).json({ error: 'Application not found' });
+    const app = appResult.rows[0];
+
+    if (['activated', 'issued', 'complete', 'partial'].includes(app.application_status)) {
+      return res.status(400).json({ error: 'Application is already approved/activated' });
+    }
+    if (app.application_status === 'rejected') {
+      return res.status(400).json({ error: 'Cannot approve a rejected application' });
+    }
+    if (!app.super_admin_email) {
+      return res.status(400).json({ error: 'Application is missing super_admin_email' });
+    }
+
+    await query('BEGIN');
+    try {
+      // Check if super_admin already exists
+      let superAdminId: string;
+      let superAdminTempPass: string | null = null;
+      let requesterTempPass: string | null = null;
+      const existingSA = await query('SELECT id FROM users WHERE email = $1', [app.super_admin_email]);
+
+      if (existingSA.rows.length > 0) {
+        superAdminId = existingSA.rows[0].id;
+      } else {
+        // Create super_admin user
+        superAdminTempPass = crypto.randomBytes(8).toString('hex');
+        const saHash = await hashPassword(superAdminTempPass);
+        const saResult = await query(
+          `INSERT INTO users (email, password_hash, role, name, sub_role)
+           VALUES ($1, $2, 'corporate', $3, 'super_admin') RETURNING id`,
+          [app.super_admin_email, saHash, app.super_admin_name || app.company_name]
+        );
+        superAdminId = saResult.rows[0].id;
+        await query('UPDATE users SET org_id = $1 WHERE id = $1', [superAdminId]);
+      }
+
+      // Create requester user if email provided and not already exists
+      if (app.requester_email) {
+        const existingReq = await query('SELECT id FROM users WHERE email = $1', [app.requester_email]);
+        if (existingReq.rows.length === 0) {
+          requesterTempPass = crypto.randomBytes(8).toString('hex');
+          const reqHash = await hashPassword(requesterTempPass);
+          await query(
+            `INSERT INTO users (email, password_hash, role, name, sub_role, org_id)
+             VALUES ($1, $2, 'corporate', $3, 'requester', $4)`,
+            [app.requester_email, reqHash, app.requester_name || 'Requester', superAdminId]
+          );
+        } else {
+          // Patch org_id if missing
+          await query('UPDATE users SET org_id = $1 WHERE id = $2 AND org_id IS NULL', [superAdminId, existingReq.rows[0].id]);
+        }
+      }
+
+      // Create maker user if maker email exists in organization_applications
+      // (some orgs have maker_email field, skip if not present)
+
+      // Patch signatory org_id
+      if (app.signatory_user_id) {
+        await query('UPDATE users SET org_id = $1 WHERE id = $2', [superAdminId, app.signatory_user_id]);
+      }
+
+      // Update application status to signatory_approved (ready for DID Issuer)
+      await query(
+        `UPDATE organization_applications
+         SET application_status = 'signatory_approved', user_id = $1, updated_at = NOW()
+         WHERE id = $2`,
+        [superAdminId, id]
+      );
+
+      await query('COMMIT');
+
+      console.log(`[PORTAL APPROVE] Org: ${app.company_name} | super_admin: ${app.super_admin_email} | pass: ${superAdminTempPass} | requester: ${app.requester_email} | pass: ${requesterTempPass}`);
+
+      res.json({
+        success: true,
+        superAdminId,
+        superAdminTempPassword: superAdminTempPass,
+        requesterTempPassword: requesterTempPass,
+        message: `${app.company_name} approved. Corporate accounts created.`,
+      });
+    } catch (innerError: any) {
+      await query('ROLLBACK');
+      throw innerError;
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Portal Manager: reject a corporate application
+app.post('/api/portal/corporate-applications/:id/reject', requireAuth, requireRole('portal_manager' as any), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!['super_admin', 'maker', 'checker'].includes(user.sub_role)) {
+      return res.status(403).json({ error: 'Only portal_manager super_admin/maker/checker can reject' });
+    }
+    const { id } = req.params;
+    const { reason } = req.body;
+    const appResult = await query('SELECT id, company_name, application_status FROM organization_applications WHERE id = $1', [id]);
+    if (appResult.rows.length === 0) return res.status(404).json({ error: 'Application not found' });
+    if (['activated', 'issued', 'complete', 'partial'].includes(appResult.rows[0].application_status)) {
+      return res.status(400).json({ error: 'Cannot reject an already activated application' });
+    }
+    await query(
+      `UPDATE organization_applications SET application_status = 'rejected', rejection_reason = $1, updated_at = NOW() WHERE id = $2`,
+      [reason || 'Rejected by portal manager', id]
+    );
+    res.json({ success: true, message: `${appResult.rows[0].company_name} application rejected` });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Portal Manager: Admin Team Management (super_admin only)
 app.get('/api/portal/admin/team', requireAuth, requireRole('portal_manager' as any), async (req, res) => {
   try {
@@ -4760,7 +5023,19 @@ app.post('/api/presentations/:id/peer-approve', requireAuth, async (req, res) =>
 app.get('/api/corporate/signatory/issued-dids', requireAuth, requireRole('corporate'), requireSubRole('authorized_signatory'), async (req, res) => {
   try {
     const user = (req as any).user;
-    const orgOwner = user.org_id || user.id; // authorized_signatory's org is their org_id
+    let orgOwner: string = user.org_id || user.id;
+    if (!user.org_id) {
+      const appRow = await query(
+        `SELECT u.id as super_admin_id FROM organization_applications oa
+         JOIN users u ON u.email = oa.super_admin_email AND u.sub_role = 'super_admin'
+         WHERE oa.signatory_user_id = $1 LIMIT 1`,
+        [user.id]
+      );
+      if (appRow.rows.length > 0) {
+        orgOwner = appRow.rows[0].super_admin_id;
+        await query(`UPDATE users SET org_id = $1 WHERE id = $2`, [orgOwner, user.id]);
+      }
+    }
     const result = await query(
       `SELECT dr.id, dr.org_id, dr.purpose, dr.request_data, dr.created_at, dr.updated_at,
               dr.as_notified_at, dr.as_shared_to_admin_at, dr.corp_signatory_id,
