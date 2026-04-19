@@ -753,7 +753,8 @@ app.post('/api/corporate/did-requests', requireAuth, requireRole('corporate'), a
     // Super admin: skip maker/checker but AS must still sign before issuer sees it
     // Other roles: should not reach here via normal nav, default to pending
     const initialStatus = (isRequester || isSuperAdmin) ? 'draft' : 'pending';
-    const initialCorpStatus: string | null = isRequester ? 'submitted' : (isSuperAdmin ? 'checker_approved' : null);
+    // Both requester and super_admin go directly to AS Sign & Submit (no corp maker/checker for DID requests)
+    const initialCorpStatus: string | null = (isRequester || isSuperAdmin) ? 'checker_approved' : null;
 
     const result = await query(
       `INSERT INTO did_requests (requester_user_id, org_id, request_data, purpose, issuer_user_id, status, corp_status)
