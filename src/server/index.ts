@@ -1155,6 +1155,24 @@ app.post('/api/authority/did-requests/:id/issue', requireAuth, requireRole('gove
       await query(`UPDATE mc_actions SET status = 'approved', checker_id = $1, updated_at = NOW() WHERE resource_id = $2 AND resource_type = 'did_request_issuance'`, [user.id, id]);
     }
 
+    // Parse request_data to detect org-registration requests
+    const rdRaw: any = typeof dr.request_data === 'string'
+      ? JSON.parse(dr.request_data || '{}')
+      : (dr.request_data || {});
+
+    // For org-registration requests: look up the issuer's parent DID for VC signing
+    let issuerDid: { id: string; did_string: string; private_key_encrypted: string } | null = null;
+    if (rdRaw.application_id) {
+      const issuerDidResult = await query(
+        `SELECT id, did_string, private_key_encrypted FROM dids
+         WHERE user_id = $1 AND did_type = 'parent' ORDER BY created_at DESC LIMIT 1`,
+        [orgRoot]
+      );
+      if (issuerDidResult.rows.length > 0) {
+        issuerDid = issuerDidResult.rows[0];
+      }
+    }
+
     // Create the DID for the corporate org
     const slug = dr.org_name?.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-') || dr.org_id.slice(0, 12);
     // Check if org already has a parent DID; if so create with unique suffix
@@ -1169,8 +1187,41 @@ app.post('/api/authority/did-requests/:id/issue', requireAuth, requireRole('gove
       [newDid.id, id]
     );
 
+    // Org-registration: issue VCs from the application documents
+    let vcsIssued = 0;
+    if (rdRaw.application_id && issuerDid) {
+      const appResult = await query(
+        'SELECT * FROM organization_applications WHERE id = $1',
+        [rdRaw.application_id]
+      );
+      if (appResult.rows.length > 0) {
+        const app = appResult.rows[0];
+        const docs: any[] = Array.isArray(app.documents)
+          ? app.documents
+          : (typeof app.documents === 'string' ? JSON.parse(app.documents || '[]') : []);
+        const vcTypes: string[] = docs.map((d: any) => d.vc_type).filter(Boolean);
+        const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+        for (const vcType of vcTypes) {
+          const vcJson = buildCorporateVC(vcType, app, issuerDid, newDid.did, expiresAt);
+          await query(
+            `INSERT INTO credentials (vc_json, holder_did_id, issuer_did_id, credential_type, issued_at, expires_at)
+             VALUES ($1, $2, $3, $4, NOW(), $5)`,
+            [JSON.stringify(vcJson), newDid.id, issuerDid.id, vcType, expiresAt]
+          );
+          vcsIssued++;
+        }
+        await query(
+          `UPDATE organization_applications
+           SET application_status = 'issued', corporate_user_id = $1, checker_id = $2, updated_at = NOW()
+           WHERE id = $3`,
+          [dr.org_id, user.id, rdRaw.application_id]
+        );
+        console.log(`[ORG DID ISSUED] did: ${newDid.did} | vcs: ${vcsIssued}`);
+      }
+    }
+
     await writeAuditLog('did_issued', null, newDid.did, 'DID');
-    res.json({ success: true, did: newDid.did, didId: newDid.id });
+    res.json({ success: true, did: newDid.did, didId: newDid.id, vcsIssued });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
