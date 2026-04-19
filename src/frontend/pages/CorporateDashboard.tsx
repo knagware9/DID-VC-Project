@@ -378,6 +378,13 @@ export default function CorporateDashboard() {
   const [inviteMsg, setInviteMsg] = useState('');
   const [corpQueue, setCorpQueue] = useState<any[]>([]);
   const [didQueue, setDidQueue] = useState<any[]>([]);
+  const [signatoryApproveCredentials, setSignatoryApproveCredentials] = useState<{
+    companyName: string;
+    superAdminEmail: string;
+    superAdminPass: string | null;
+    requesterEmail: string | null;
+    requesterPass: string | null;
+  } | null>(null);
   const [vpReviewQueue, setVpReviewQueue] = useState<any[]>([]);
   const [sharePeerTarget, setSharePeerTarget] = useState<{ presentationId: string; email: string; note: string } | null>(null);
   const [myDidRequests, setMyDidRequests] = useState<any[]>([]);
@@ -399,9 +406,7 @@ export default function CorporateDashboard() {
   const [empAccountModal, setEmpAccountModal] = useState<{ email: string; password: string } | null>(null);
   const [viewModal, setViewModal] = useState<{ request: any; type: 'vc' | 'did' } | null>(null);
   const [allWalletCredentials, setAllWalletCredentials] = useState<any[]>([]);
-  const [orgWalletTypes, setOrgWalletTypes] = useState<string[]>([
-    'IECCredential', 'MCARegistration', 'GSTINCredential', 'PANCredential', 'IBDICDigitalIdentityCredential',
-  ]);
+  const [orgWalletTypes, setOrgWalletTypes] = useState<string[]>([]);
 
   useEffect(() => { loadAll(); }, [tab]);
 
@@ -428,13 +433,12 @@ export default function CorporateDashboard() {
         ]);
         setEmployees(emp.employees || []);
         setIssuedByMe(issued.credentials || []);
-        // Build dynamic list of shareable types from what the org actually holds
-        const BASE_TYPES = ['IECCredential', 'MCARegistration', 'GSTINCredential', 'PANCredential', 'IBDICDigitalIdentityCredential'];
-        const orgTypes = (orgCreds.credentials || [])
+        // Only show credential types that are ACTUALLY issued to the corporate (not revoked)
+        // Do NOT include hardcoded base types — admin can only grant access to credentials that exist
+        const orgIssuedTypes = (orgCreds.credentials || [])
           .filter((c: any) => !c.revoked)
           .map((c: any) => c.credential_type as string);
-        const merged = Array.from(new Set([...BASE_TYPES, ...orgTypes]));
-        setOrgWalletTypes(merged);
+        setOrgWalletTypes(Array.from(new Set(orgIssuedTypes)));
       } else if (tab === 'issue' || tab === 'request-vc') {
         const data = await api.getIssuers(token);
         setIssuers(data.issuers || []);
@@ -612,6 +616,33 @@ export default function CorporateDashboard() {
     await handleCorpAction(id, type, stage, 'reject', reason || undefined);
   }
 
+  async function handleSignatoryApproveDID(req: any) {
+    if (!token) return;
+    try {
+      const r = await fetch(`/api/corporate/did-requests/${req.id}/signatory-approve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision: 'approve' }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      if (d.superAdminTempPassword || d.requesterTempPassword) {
+        const rd: any = typeof req.request_data === 'string'
+          ? JSON.parse(req.request_data || '{}')
+          : (req.request_data || {});
+        setSignatoryApproveCredentials({
+          companyName: rd.company_name || rd.orgName || 'Company',
+          superAdminEmail: '(use email from registration form)',
+          superAdminPass: d.superAdminTempPassword || null,
+          requesterEmail: null,
+          requesterPass: d.requesterTempPassword || null,
+        });
+      }
+      showMsg('success', '✓ DID request forwarded to DID Issuer');
+      loadAll();
+    } catch (err: any) { showMsg('error', err.message); }
+  }
+
   async function handleDIDRequestSubmit(e: React.FormEvent) {
     e.preventDefault(); if (!token) return;
     if (!didReqForm.orgName.trim()) { showMsg('error', 'Organisation Name is required'); return; }
@@ -638,9 +669,7 @@ export default function CorporateDashboard() {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
-      showMsg('success', subRole === 'requester'
-        ? 'DID request submitted — Maker → Checker → Authorised Signatory → Issuer'
-        : 'DID request submitted to issuer for issuance');
+      showMsg('success', 'DID request submitted — awaiting Authorised Signatory approval');
       setDidReqForm({ issuerUserId: '', orgName: '', cin: '', entityType: 'Private Limited', purpose: '', superAdminName: '', superAdminEmail: '', contactPerson: '', contactEmail: '', additionalNotes: '' });
     } catch (err: any) { showMsg('error', err.message); }
   }
@@ -845,12 +874,12 @@ return (
                           {expandedPermEmpId === emp.id && (
                             <div style={{ marginTop: '0.5rem' }}>
                               <div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: '0.5rem' }}>
-                                Select which corporate credentials this employee can share on behalf of the organisation:
+                                Select which issued corporate credentials this employee can share on behalf of the organisation:
                               </div>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '0.75rem' }}>
                                 {orgWalletTypes.length === 0 && (
                                   <p style={{ color: '#94a3b8', fontSize: '0.78rem' }}>
-                                    No credentials in corporate wallet yet. Issue or request credentials first.
+                                    No credentials have been issued to the corporate wallet yet. Request or receive credentials first before assigning employee share access.
                                   </p>
                                 )}
                                 {orgWalletTypes.map(ct => (
@@ -1421,9 +1450,9 @@ return (
               {activeWallet === 'employee' && (
                 <div>
                   <p style={{ fontSize: '0.8rem', color: '#3b82f6', background: '#eff6ff', padding: '8px 12px', borderRadius: 6, marginBottom: '1rem' }}>
-                    ℹ️ These are credentials issued directly to your identity. Only you can share them.
+                    ℹ️ Credentials issued directly to your identity (sub-DID). Only you can share these.
                   </p>
-                  {empWalletCredentials.length === 0 ? (
+                  {empWalletCredentials.filter((c: any) => !c.revoked).length === 0 ? (
                     <p style={{ color: '#888' }}>No credentials in your employee wallet yet.</p>
                   ) : (
                     <div style={{ display: 'grid', gap: '0.75rem', maxWidth: 600 }}>
@@ -1436,7 +1465,8 @@ return (
                                 {c.issuer_did_string ? `Issued by: ${c.issuer_did_string.split(':').pop()}` : 'Issuer unknown'}
                               </div>
                               <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 2 }}>
-                                {new Date(c.issued_at).toLocaleDateString()}
+                                Issued: {new Date(c.issued_at).toLocaleDateString()}
+                                {c.expires_at && <span> · Expires: {new Date(c.expires_at).toLocaleDateString()}</span>}
                               </div>
                             </div>
                             <span style={{ background: '#dcfce7', color: '#16a34a', fontSize: '0.65rem', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>ACTIVE</span>
@@ -1783,28 +1813,61 @@ return (
             </div>
           )}
 
+          {/* Temp credentials panel after AS approves a registration DID request */}
+          {tab === 'signatory-queue' && signatoryApproveCredentials && (
+            <div style={{ background: '#fefce8', border: '2px solid #fde047', borderRadius: 12, padding: '1.25rem', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <div style={{ fontWeight: 800, color: '#713f12', fontSize: '0.95rem' }}>
+                  🔐 New Account Credentials — {signatoryApproveCredentials.companyName}
+                </div>
+                <button onClick={() => setSignatoryApproveCredentials(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: '#92400e' }}>✕</button>
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#92400e', marginBottom: '0.75rem' }}>
+                ⚠️ Copy these passwords now — they will not be shown again.
+              </div>
+              {signatoryApproveCredentials.superAdminPass && (
+                <div style={{ background: 'white', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: '1px solid #fde047' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#2563eb', marginBottom: '0.25rem' }}>SUPER ADMIN</div>
+                  <div style={{ fontSize: '0.85rem', color: '#1e293b' }}>Email: <strong>{signatoryApproveCredentials.superAdminEmail}</strong></div>
+                  <div style={{ fontSize: '0.85rem', color: '#1e293b' }}>Temp Password: <strong style={{ fontFamily: 'monospace', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>{signatoryApproveCredentials.superAdminPass}</strong></div>
+                </div>
+              )}
+              {signatoryApproveCredentials.requesterPass && (
+                <div style={{ background: 'white', borderRadius: 8, padding: '0.75rem 1rem', border: '1px solid #fde047' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#7c3aed', marginBottom: '0.25rem' }}>REQUESTER</div>
+                  <div style={{ fontSize: '0.85rem', color: '#1e293b' }}>Temp Password: <strong style={{ fontFamily: 'monospace', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>{signatoryApproveCredentials.requesterPass}</strong></div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Tab: Authorized Signatory Queue — DID Requests only (VC goes directly after checker) */}
           {tab === 'signatory-queue' && (
             <div>
-              <h3 style={{ marginBottom: 4 }}>Sign & Submit — DID Requests <span style={{ fontSize: '0.8rem', background: '#ede9fe', color: '#4c1d95', padding: '2px 8px', borderRadius: 12, marginLeft: 8 }}>{didQueue.length} awaiting signature</span></h3>
+              <h3 style={{ marginBottom: 4 }}>Sign & Submit — DID Requests <span style={{ fontSize: '0.8rem', background: '#ede9fe', color: '#4c1d95', padding: '2px 8px', borderRadius: 12, marginLeft: 8 }}>{didQueue.filter((r: any) => r.corp_status === 'checker_approved').length} awaiting signature</span></h3>
               <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
                 Final corporate approval for DID creation. Signing forwards the request to the DID Authority (IBDIC) for issuance.
               </p>
               <div className="card" style={{ background: '#fef3c7', border: '1px solid #f59e0b', padding: '0.6rem 1rem', marginBottom: '1rem', fontSize: '0.82rem', color: '#92400e' }}>
                 ⚠️ <strong>Important:</strong> Approving will forward the DID request to the issuer authority. This action cannot be undone.
               </div>
-              {didQueue.length === 0 ? (
+              {didQueue.filter((r: any) => r.corp_status === 'checker_approved').length === 0 ? (
                 <div className="card" style={{ padding: '1.5rem', textAlign: 'center', color: '#888' }}>No DID requests awaiting your signature</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {didQueue.map((r: any) => {
+                  {didQueue.filter((r: any) => r.corp_status === 'checker_approved').map((r: any) => {
                     const rd = typeof r.request_data === 'string' ? JSON.parse(r.request_data || '{}') : (r.request_data || {});
                     return (
                       <div key={r.id} className="card" style={{ padding: '1rem', border: '2px solid #7c3aed20' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           <div>
-                            <span style={{ fontWeight: 700 }}>🔑 {rd.orgName || 'DID Creation Request'}</span>
-                            <span style={{ marginLeft: 8, fontSize: '0.72rem', background: '#ede9fe', color: '#4c1d95', padding: '2px 7px', borderRadius: 12 }}>Checker Approved</span>
+                            <span style={{ fontWeight: 700 }}>
+                              {rd.application_id
+                                ? `🏢 Corporate Registration — ${rd.company_name || rd.orgName || 'New Corporate'}`
+                                : `🔑 ${rd.orgName || r.purpose || 'DID Creation Request'}`}
+                            </span>
+                            <span style={{ marginLeft: 8, fontSize: '0.72rem', background: '#ede9fe', color: '#4c1d95', padding: '2px 7px', borderRadius: 12 }}>Awaiting Signature</span>
                           </div>
                           <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{new Date(r.created_at).toLocaleString()}</span>
                         </div>
@@ -1825,8 +1888,8 @@ return (
                             👁 View Details
                           </button>
                           <button className="btn btn-primary btn-sm" style={{ fontSize: '0.82rem', background: '#7c3aed', borderColor: '#7c3aed' }}
-                            onClick={() => handleCorpAction(r.id, 'did', 'signatory-approve', 'approve')}>
-                            ✍️ Sign & Forward to IBDIC
+                            onClick={() => handleSignatoryApproveDID(r)}>
+                            ✍️ Sign & Forward to DID Issuer
                           </button>
                           <button className="btn btn-secondary btn-sm" style={{ fontSize: '0.82rem', color: '#dc2626' }}
                             onClick={() => handleCorpReject(r.id, 'did', 'signatory-approve')}>
