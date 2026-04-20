@@ -10,6 +10,7 @@ export default function SignatoryDashboard() {
   const [actionLoading, setActionLoading] = useState(false);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [createdCredentials, setCreatedCredentials] = useState<{ companyName: string; superAdminEmail: string; superAdminPass: string | null; requesterEmail: string | null; requesterPass: string | null } | null>(null);
 
   // Issued DID state
   const [issuedDids, setIssuedDids] = useState<any[]>([]);
@@ -68,6 +69,7 @@ export default function SignatoryDashboard() {
     if (actionLoading) return;
     setActionLoading(true);
     setMsg('');
+    setCreatedCredentials(null);
     try {
       const res = await fetch(`/api/corporate/signatory/applications/${appId}/approve`, {
         method: 'POST', headers: authHeader(), body: '{}',
@@ -75,8 +77,19 @@ export default function SignatoryDashboard() {
       let data: any = {};
       try { data = await res.json(); } catch { /* non-JSON */ }
       if (!res.ok) throw new Error(data.error || 'Approval failed');
-      setMsg('Application approved and submitted to DID Issuer.');
+      setMsg('Application approved. Corporate accounts are active.');
       setMsgType('success');
+      // Store credentials to display to the signatory
+      const approvedApp = applications.find((a: any) => a.id === appId);
+      if (data.superAdminTempPassword || data.requesterTempPassword) {
+        setCreatedCredentials({
+          companyName: approvedApp?.company_name || 'Company',
+          superAdminEmail: approvedApp?.super_admin_email || '',
+          superAdminPass: data.superAdminTempPassword || null,
+          requesterEmail: approvedApp?.requester_email || null,
+          requesterPass: data.requesterTempPassword || null,
+        });
+      }
       loadApplications();
     } catch (e: any) { setMsg(e.message); setMsgType('error'); }
     finally { setActionLoading(false); }
@@ -145,6 +158,35 @@ export default function SignatoryDashboard() {
             border: `1px solid ${msgType === 'success' ? '#bbf7d0' : '#fecaca'}`,
           }}>
             {msg}
+          </div>
+        )}
+
+        {/* Temp credentials panel — shown after approve creates new accounts */}
+        {createdCredentials && (
+          <div style={{ background: '#fefce8', border: '2px solid #fde047', borderRadius: 12, padding: '1.25rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div style={{ fontWeight: 800, color: '#713f12', fontSize: '0.95rem' }}>
+                🔐 New Account Credentials — {createdCredentials.companyName}
+              </div>
+              <button onClick={() => setCreatedCredentials(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: '#92400e' }}>✕</button>
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#92400e', marginBottom: '0.75rem' }}>
+              ⚠️ Copy these credentials now. Passwords will not be shown again.
+            </div>
+            {createdCredentials.superAdminPass && (
+              <div style={{ background: 'white', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: '1px solid #fde047' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#2563eb', marginBottom: '0.25rem' }}>SUPER ADMIN</div>
+                <div style={{ fontSize: '0.85rem', color: '#1e293b' }}>Email: <strong>{createdCredentials.superAdminEmail}</strong></div>
+                <div style={{ fontSize: '0.85rem', color: '#1e293b' }}>Temp Password: <strong style={{ fontFamily: 'monospace', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>{createdCredentials.superAdminPass}</strong></div>
+              </div>
+            )}
+            {createdCredentials.requesterPass && createdCredentials.requesterEmail && (
+              <div style={{ background: 'white', borderRadius: 8, padding: '0.75rem 1rem', border: '1px solid #fde047' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#7c3aed', marginBottom: '0.25rem' }}>REQUESTER</div>
+                <div style={{ fontSize: '0.85rem', color: '#1e293b' }}>Email: <strong>{createdCredentials.requesterEmail}</strong></div>
+                <div style={{ fontSize: '0.85rem', color: '#1e293b' }}>Temp Password: <strong style={{ fontFamily: 'monospace', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>{createdCredentials.requesterPass}</strong></div>
+              </div>
+            )}
           </div>
         )}
 

@@ -19,6 +19,16 @@ type OrgRow = {
   application_status: string; authority_verifications: Record<string, any>; created_at: string;
 };
 
+type CorpApplication = {
+  id: string; company_name: string; cin: string; pan_number: string; gstn: string;
+  super_admin_name: string; super_admin_email: string;
+  requester_name: string; requester_email: string;
+  signatory_name: string; signatory_email: string; signatory_user_id: string;
+  application_status: string; rejection_reason: string | null;
+  state: string; date_of_incorporation: string; director_full_name: string; designation: string;
+  created_at: string; super_admin_exists: string | null;
+};
+
 type Stats = {
   total_orgs: string; total_entities: string;
   approved_orgs: string; rejected_orgs: string;
@@ -77,6 +87,13 @@ export default function PortalManagerDashboard() {
   const [showTeamForm, setShowTeamForm] = useState(false);
   const [teamForm, setTeamForm] = useState({ email: '', name: '', sub_role: 'maker' });
 
+  const [corpApplications, setCorpApplications] = useState<CorpApplication[]>([]);
+  const [corpAppFilter, setCorpAppFilter] = useState('');
+  const [corpViewApp, setCorpViewApp] = useState<CorpApplication | null>(null);
+  const [corpApproveResult, setCorpApproveResult] = useState<{ superAdminTempPassword?: string; requesterTempPassword?: string; message?: string } | null>(null);
+  const [corpRejectingId, setCorpRejectingId] = useState<string | null>(null);
+  const [corpRejectReason, setCorpRejectReason] = useState('');
+
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
@@ -86,7 +103,7 @@ export default function PortalManagerDashboard() {
 
   const authHeader = () => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' });
 
-  useEffect(() => { loadTab(); }, [tab, didPage, orgStatusFilter]);
+  useEffect(() => { loadTab(); }, [tab, didPage, orgStatusFilter, corpAppFilter]);
 
   async function loadTab() {
     setLoading(true);
@@ -105,10 +122,10 @@ export default function PortalManagerDashboard() {
         setDids(d.dids || []);
         setDidTotal(d.total || 0);
       } else if (tab === 'organizations') {
-        const qs = orgStatusFilter ? `?status=${orgStatusFilter}` : '';
-        const r = await fetch(`/api/portal/organizations${qs}`, { headers: authHeader() });
+        const qs = corpAppFilter ? `?status=${corpAppFilter}` : '';
+        const r = await fetch(`/api/portal/corporate-applications${qs}`, { headers: authHeader() });
         const d = await r.json();
-        setOrgs(d.organizations || []);
+        setCorpApplications(d.applications || []);
       } else if (tab === 'entities') {
         const r = await fetch('/api/portal/entities', { headers: authHeader() });
         const d = await r.json();
@@ -197,6 +214,38 @@ export default function PortalManagerDashboard() {
       if (!r.ok) throw new Error(d.error);
       setRejectingId(null);
       setRejectReason('');
+      loadTab();
+    } catch (e: any) { setMsg(e.message); }
+    finally { setLoading(false); }
+  }
+
+  async function handleCorpApprove(id: string) {
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/portal/corporate-applications/${id}/approve`, {
+        method: 'POST', headers: authHeader(), body: JSON.stringify({}),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      setCorpApproveResult({ superAdminTempPassword: d.superAdminTempPassword, requesterTempPassword: d.requesterTempPassword, message: d.message });
+      setCorpViewApp(null);
+      loadTab();
+    } catch (e: any) { setMsg(e.message); }
+    finally { setLoading(false); }
+  }
+
+  async function handleCorpReject(id: string) {
+    if (!corpRejectReason.trim()) { setMsg('Rejection reason is required'); return; }
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/portal/corporate-applications/${id}/reject`, {
+        method: 'POST', headers: authHeader(), body: JSON.stringify({ reason: corpRejectReason }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      setCorpRejectingId(null);
+      setCorpRejectReason('');
+      setCorpViewApp(null);
       loadTab();
     } catch (e: any) { setMsg(e.message); }
     finally { setLoading(false); }
@@ -638,49 +687,161 @@ export default function PortalManagerDashboard() {
       {/* ── Corporate / Members ── */}
       {tab === 'organizations' && (
         <>
+          {/* Approve result banner */}
+          {corpApproveResult && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+              <div style={{ fontWeight: 700, color: '#15803d', marginBottom: '0.5rem' }}>✅ {corpApproveResult.message}</div>
+              {corpApproveResult.superAdminTempPassword && (
+                <div style={{ fontSize: '0.85rem', color: '#166534', marginBottom: '0.25rem' }}>
+                  <strong>Super Admin temp password:</strong> <code style={{ background: '#dcfce7', padding: '2px 6px', borderRadius: 4 }}>{corpApproveResult.superAdminTempPassword}</code>
+                </div>
+              )}
+              {corpApproveResult.requesterTempPassword && (
+                <div style={{ fontSize: '0.85rem', color: '#166534' }}>
+                  <strong>Requester temp password:</strong> <code style={{ background: '#dcfce7', padding: '2px 6px', borderRadius: 4 }}>{corpApproveResult.requesterTempPassword}</code>
+                </div>
+              )}
+              <button className="btn btn-secondary btn-sm" style={{ marginTop: '0.5rem' }} onClick={() => setCorpApproveResult(null)}>Dismiss</button>
+            </div>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-            <h2 style={{ margin: 0 }}>Corporate / Members</h2>
-            <select className="form-input" value={orgStatusFilter} onChange={e => setOrgStatusFilter(e.target.value)} style={{ width: 180 }}>
+            <h2 style={{ margin: 0 }}>Corporate Applications</h2>
+            <select className="form-input" value={corpAppFilter} onChange={e => setCorpAppFilter(e.target.value)} style={{ width: 200 }}>
               <option value="">All Statuses</option>
               <option value="pending">Pending</option>
-              <option value="partial">Partial</option>
-              <option value="complete">Complete</option>
+              <option value="signatory_approved">Signatory Approved</option>
+              <option value="maker_reviewed">Maker Reviewed</option>
+              <option value="issued">Issued / Active</option>
               <option value="rejected">Rejected</option>
             </select>
           </div>
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f8f9fa' }}>
-                  {['Company Name', 'CIN', 'Status', 'Approvals', 'Applied'].map(h => (
-                    <th key={h} style={thStyle}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {orgs.length === 0 && (
-                  <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>No organizations found.</td></tr>
-                )}
-                {orgs.map(o => {
-                  const approvalCount = Object.values(o.authority_verifications || {})
-                    .filter((v: any) => v.status === 'approved').length;
-                  return (
-                    <tr key={o.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                      <td style={{ ...tdStyle, fontWeight: 600 }}>{o.company_name}</td>
-                      <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: '0.8rem' }}>{o.cin}</td>
-                      <td style={tdStyle}><StatusBadge status={o.application_status} /></td>
-                      <td style={tdStyle}>
-                        <span style={{ background: approvalCount === 4 ? '#d4edda' : '#fff3cd', color: approvalCount === 4 ? '#155724' : '#856404', padding: '0.2rem 0.6rem', borderRadius: 12, fontSize: '0.75rem', fontWeight: 700 }}>
-                          {approvalCount}/4
+
+          {corpApplications.length === 0 ? (
+            <div className="card" style={{ padding: '3rem', textAlign: 'center', color: '#888' }}>No corporate applications found.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {corpApplications.map(app => {
+                const isPending = ['pending', 'signatory_approved'].includes(app.application_status);
+                const isActivated = ['issued', 'complete', 'partial', 'activated', 'maker_reviewed'].includes(app.application_status);
+                const statusColor: Record<string, string> = {
+                  pending: '#f59e0b', signatory_approved: '#3b82f6',
+                  maker_reviewed: '#8b5cf6', issued: '#16a34a',
+                  complete: '#16a34a', rejected: '#dc2626', activated: '#16a34a',
+                };
+                return (
+                  <div key={app.id} className="card" style={{ padding: '1rem', borderLeft: `4px solid ${statusColor[app.application_status] || '#94a3b8'}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '1rem', color: '#0f172a' }}>{app.company_name}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'monospace', marginTop: 2 }}>CIN: {app.cin || '—'}</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: `${statusColor[app.application_status]}22`, color: statusColor[app.application_status] || '#64748b' }}>
+                          {app.application_status.replace(/_/g, ' ').toUpperCase()}
                         </span>
-                      </td>
-                      <td style={{ ...tdStyle, color: '#888' }}>{new Date(o.created_at).toLocaleDateString()}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{new Date(app.created_at).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginTop: '0.75rem', fontSize: '0.8rem', color: '#475569' }}>
+                      <div><strong>Super Admin:</strong><br />{app.super_admin_name} <span style={{ color: '#94a3b8' }}>({app.super_admin_email})</span></div>
+                      <div><strong>Requester:</strong><br />{app.requester_name || '—'} <span style={{ color: '#94a3b8' }}>({app.requester_email || '—'})</span></div>
+                      <div><strong>Signatory:</strong><br />{app.signatory_name || '—'} <span style={{ color: '#94a3b8' }}>({app.signatory_email || '—'})</span></div>
+                    </div>
+
+                    {app.rejection_reason && (
+                      <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#dc2626', background: '#fef2f2', padding: '6px 10px', borderRadius: 6 }}>
+                        Rejected: {app.rejection_reason}
+                      </div>
+                    )}
+
+                    {app.super_admin_exists && isActivated && (
+                      <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#16a34a' }}>✓ Corporate user accounts created</div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: 8, marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setCorpViewApp(app)}>
+                        👁 View Details
+                      </button>
+                      {isPending && (
+                        <>
+                          <button className="btn btn-primary btn-sm" style={{ background: '#16a34a', borderColor: '#16a34a' }}
+                            onClick={() => handleCorpApprove(app.id)} disabled={loading}>
+                            ✓ Approve & Activate
+                          </button>
+                          <button className="btn btn-secondary btn-sm" style={{ color: '#dc2626' }}
+                            onClick={() => { setCorpRejectingId(app.id); setCorpViewApp(null); }}>
+                            ✗ Reject
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Inline reject form */}
+                    {corpRejectingId === app.id && (
+                      <div style={{ marginTop: '0.75rem', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '0.75rem' }}>
+                        <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: '#dc2626' }}>Rejection reason</div>
+                        <textarea className="form-input" rows={2} value={corpRejectReason}
+                          onChange={e => setCorpRejectReason(e.target.value)}
+                          placeholder="State why this application is being rejected..." />
+                        <div style={{ display: 'flex', gap: 8, marginTop: '0.5rem' }}>
+                          <button className="btn btn-primary btn-sm" style={{ background: '#dc2626', borderColor: '#dc2626' }}
+                            onClick={() => handleCorpReject(app.id)} disabled={loading}>
+                            Confirm Reject
+                          </button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => { setCorpRejectingId(null); setCorpRejectReason(''); }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* View Details Modal */}
+          {corpViewApp && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+              onClick={() => setCorpViewApp(null)}>
+              <div style={{ background: 'white', borderRadius: 12, padding: '1.5rem', maxWidth: 600, width: '100%', maxHeight: '80vh', overflow: 'auto' }}
+                onClick={e => e.stopPropagation()}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                  <h3 style={{ margin: 0 }}>{corpViewApp.company_name}</h3>
+                  <button onClick={() => setCorpViewApp(null)} style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer' }}>✕</button>
+                </div>
+                {([
+                  ['CIN', corpViewApp.cin], ['PAN', corpViewApp.pan_number], ['GSTN', corpViewApp.gstn],
+                  ['State', corpViewApp.state], ['Incorporated', corpViewApp.date_of_incorporation],
+                  ['Director', corpViewApp.director_full_name], ['Designation', corpViewApp.designation],
+                  ['Super Admin', `${corpViewApp.super_admin_name} (${corpViewApp.super_admin_email})`],
+                  ['Requester', `${corpViewApp.requester_name} (${corpViewApp.requester_email})`],
+                  ['Signatory', `${corpViewApp.signatory_name} (${corpViewApp.signatory_email})`],
+                  ['Status', corpViewApp.application_status],
+                  ['Applied', new Date(corpViewApp.created_at).toLocaleString()],
+                ] as [string, string][]).map(([label, value]) => (
+                  <div key={label} style={{ display: 'flex', gap: '1rem', padding: '0.4rem 0', borderBottom: '1px solid #f1f5f9', fontSize: '0.85rem' }}>
+                    <div style={{ width: 120, fontWeight: 600, color: '#64748b', flexShrink: 0 }}>{label}</div>
+                    <div style={{ color: '#0f172a' }}>{value || '—'}</div>
+                  </div>
+                ))}
+                {['pending', 'signatory_approved'].includes(corpViewApp.application_status) && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: '1rem' }}>
+                    <button className="btn btn-primary" style={{ background: '#16a34a', borderColor: '#16a34a' }}
+                      onClick={() => handleCorpApprove(corpViewApp.id)} disabled={loading}>
+                      ✓ Approve & Activate
+                    </button>
+                    <button className="btn btn-secondary" style={{ color: '#dc2626' }}
+                      onClick={() => { setCorpRejectingId(corpViewApp.id); setCorpViewApp(null); }}>
+                      ✗ Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
 

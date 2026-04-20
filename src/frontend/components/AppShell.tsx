@@ -53,7 +53,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { tab: 'did-requests',   label: 'DID Requests',     icon: '🔑' },
     { tab: 'checker-queue',  label: 'Checker Queue',    icon: '✅', subRoles: ['checker', 'super_admin'] },
     { tab: 'issued',            label: 'Issued',             icon: '📋' },
-    { tab: 'did-applications',  label: 'DID Applications',   icon: '🏢', subRoles: ['maker', 'checker', 'super_admin'] },
+    { tab: 'did-applications',  label: 'DID Applications',   icon: '🏢', subRoles: ['super_admin'] },
     { tab: 'team',              label: 'Team',               icon: '👥', subRoles: ['super_admin'] },
   ],
   verifier: [
@@ -125,8 +125,9 @@ export default function AppShell({ children, pageTitle }: AppShellProps) {
     <AppShellContext.Provider value={{ activeTab, setActiveTab }}>
       <div className="app-shell">
         <aside className="sidebar">
-          <div className="sidebar-logo">
-            DID <span>VC</span> Platform
+          <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1rem 1rem 0.75rem' }}>
+            <img src="/ibdic-logo.svg" alt="IBDIC" style={{ width: 36, height: 36, flexShrink: 0 }} />
+            <span>DID <span>VC</span> Platform</span>
           </div>
           <nav className="sidebar-nav">
             {navItems.map(item => (

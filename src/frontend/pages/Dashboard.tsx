@@ -34,9 +34,12 @@ const Dashboard: React.FC = () => {
 
       {/* ── Top Nav ── */}
       <nav style={{ background: '#0f172a', padding: '0.75rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ color: 'white', fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>
-          🔐 DID·VC Platform
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <img src="/ibdic-logo.svg" alt="IBDIC" style={{ width: 36, height: 36 }} />
+          <span style={{ color: 'white', fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.02em' }}>
+            DID·VC Platform
+          </span>
+        </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           <Link to="/login" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.875rem' }}>Login</Link>
           <Link to="/signup" style={{
@@ -47,23 +50,43 @@ const Dashboard: React.FC = () => {
       </nav>
 
       {/* ── Hero ── */}
-      <section style={{ background: 'linear-gradient(135deg, #1e3a5f, #0f172a)', padding: '5rem 2rem', textAlign: 'center' }}>
-        <div style={{ fontSize: '0.75rem', color: '#60a5fa', fontWeight: 700, letterSpacing: '0.15em', marginBottom: '1.25rem', textTransform: 'uppercase' }}>
-          India's Decentralised Identity Network
+      <section style={{ background: 'linear-gradient(135deg, #1e3a5f, #0f172a)', padding: '4rem 2rem' }}>
+        <div style={{ maxWidth: 960, margin: '0 auto', display: 'flex', alignItems: 'center', gap: '4rem', flexWrap: 'wrap' }}>
+
+          {/* Left — IBDIC branding */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 180, flex: '0 0 auto' }}>
+            <img src="/ibdic-logo.svg" alt="IBDIC Logo" style={{ width: 140, height: 140, marginBottom: '1rem' }} />
+            <div style={{ color: 'white', fontWeight: 800, fontSize: '1rem', letterSpacing: '0.06em', textAlign: 'center', lineHeight: 1.3 }}>
+              IBDIC
+            </div>
+            <div style={{ color: '#93c5fd', fontSize: '0.72rem', fontWeight: 500, textAlign: 'center', marginTop: '0.3rem', maxWidth: 160 }}>
+              Indian Banks' Digital Infrastructure Company
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div style={{ width: 1, background: 'rgba(255,255,255,0.15)', height: 140, flexShrink: 0 }} />
+
+          {/* Right — platform content */}
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ fontSize: '0.72rem', color: '#60a5fa', fontWeight: 700, letterSpacing: '0.15em', marginBottom: '1rem', textTransform: 'uppercase' }}>
+              India's Decentralised Identity Network
+            </div>
+            <h1 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.75rem)', color: 'white', fontWeight: 800, marginBottom: '0.75rem', lineHeight: 1.2 }}>
+              Verifiable Credentials for<br />Indian Enterprises
+            </h1>
+            <p style={{ color: '#94a3b8', fontSize: '1.05rem', marginBottom: '2rem' }}>
+              Issue · Verify · Share
+            </p>
+            <Link to="/signup" style={{
+              background: '#2563eb', color: 'white', textDecoration: 'none',
+              padding: '0.8rem 2rem', borderRadius: 8, fontSize: '1rem', fontWeight: 700,
+              display: 'inline-block',
+            }}>
+              Register Your Corporate →
+            </Link>
+          </div>
         </div>
-        <h1 style={{ fontSize: 'clamp(1.75rem, 4vw, 3rem)', color: 'white', fontWeight: 800, marginBottom: '0.75rem', lineHeight: 1.2 }}>
-          Verifiable Credentials for<br />Indian Enterprises
-        </h1>
-        <p style={{ color: '#94a3b8', fontSize: '1.1rem', marginBottom: '2.5rem' }}>
-          Issue · Verify · Share
-        </p>
-        <Link to="/signup" style={{
-          background: '#2563eb', color: 'white', textDecoration: 'none',
-          padding: '0.8rem 2rem', borderRadius: 8, fontSize: '1rem', fontWeight: 700,
-          display: 'inline-block',
-        }}>
-          Register Your Corporate →
-        </Link>
       </section>
 
       {/* ── DID Issuers Strip ── */}
@@ -135,8 +158,11 @@ const Dashboard: React.FC = () => {
       </section>
 
       {/* ── Footer ── */}
-      <footer style={{ background: '#0f172a', padding: '1.5rem 2rem', textAlign: 'center' }}>
-        <span style={{ color: '#475569', fontSize: '0.8rem' }}>DID·VC Platform — India's Decentralised Identity Network</span>
+      <footer style={{ background: '#0f172a', padding: '1.5rem 2rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem' }}>
+        <img src="/ibdic-logo.svg" alt="IBDIC" style={{ width: 24, height: 24, opacity: 0.7 }} />
+        <span style={{ color: '#475569', fontSize: '0.8rem' }}>
+          IBDIC — Indian Banks' Digital Infrastructure Company &nbsp;|&nbsp; DID·VC Platform
+        </span>
       </footer>
     </div>
   );

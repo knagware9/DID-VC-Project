@@ -574,7 +574,22 @@
       "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem -r /Users/kamleshnagware/did-vc-project/dist/frontend/. ubuntu@3.111.36.10:/tmp/frontend-dist2/)",
       "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/dist/server/index.js ubuntu@3.111.36.10:/tmp/server-index.js)",
       "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem -r /Users/kamleshnagware/did-vc-project/dist/server/index.js ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/dist/server/index.js)",
-      "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/src/server/index.ts ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/src/server/index.ts)"
+      "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/src/server/index.ts ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/src/server/index.ts)",
+      "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/src/frontend/pages/AuthorityDashboard.tsx ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/src/frontend/pages/AuthorityDashboard.tsx)",
+      "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/src/frontend/components/AppShell.tsx ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/src/frontend/components/AppShell.tsx)",
+      "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/src/frontend/pages/CorporateDashboard.tsx ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/src/frontend/pages/CorporateDashboard.tsx)",
+      "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/src/frontend/pages/Dashboard.tsx /Users/kamleshnagware/did-vc-project/src/frontend/components/AppShell.tsx /Users/kamleshnagware/did-vc-project/src/frontend/App.tsx ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/src/frontend/pages/)",
+      "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/src/frontend/components/AppShell.tsx ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/src/frontend/components/)",
+      "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/src/frontend/App.tsx ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/src/frontend/)",
+      "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/public/ibdic-logo.svg ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/public/)",
+      "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/public/ibdic-logo.svg ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/public/ibdic-logo.svg)",
+      "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/src/frontend/App.tsx ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/src/frontend/App.tsx)",
+      "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/src/frontend/pages/PortalManagerDashboard.tsx ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/src/frontend/pages/PortalManagerDashboard.tsx)",
+      "Bash(scp -i /Users/kamleshnagware/Downloads/pocdid.pem /Users/kamleshnagware/did-vc-project/src/frontend/pages/SignatoryDashboard.tsx ubuntu@3.111.36.10:/home/ubuntu/did-vc-project/src/frontend/pages/SignatoryDashboard.tsx)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(curl -s http://3.111.36.10:3001/api/health)",
+      "Bash(curl -s http://3.111.36.10:3001/api/auth/health)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://3.111.36.10:3001/api/auth/login -X POST -H 'Content-Type: application/json' -d '{\"email\":\"test\",\"password\":\"test\"}')"
     ]
   }
 }

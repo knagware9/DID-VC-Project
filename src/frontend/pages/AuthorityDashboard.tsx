@@ -65,6 +65,9 @@ export default function AuthorityDashboard() {
   const [rejectTarget, setRejectTarget] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
+  // View Details modal
+  const [viewModal, setViewModal] = useState<{ type: 'vc' | 'did' | 'mc'; data: any } | null>(null);
+
   // Success modal
   const [successCredential, setSuccessCredential] = useState<any>(null);
   const [successBesuTxHash, setSuccessBesuTxHash] = useState<string | undefined>(undefined);
@@ -413,29 +416,35 @@ export default function AuthorityDashboard() {
                         ? <span style={{ background: '#dbeafe', color: '#1e40af', padding: '0.2rem 0.6rem', borderRadius: 12, fontSize: '0.7rem', fontWeight: 600 }}>In Checker Queue</span>
                         : statusBadge(req.status)}
                     </td>
-                    <td style={{ ...tdStyle, display: 'flex', gap: '0.5rem' }}>
-                      {(subRole === 'super_admin' || !subRole) && !req.mc_action_id && (
-                        <button className="btn btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
-                          disabled={loading} onClick={() => handleApproveRequest(req.id)}>
-                          Approve &amp; Issue
+                    <td style={{ ...tdStyle }}>
+                      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        <button className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }}
+                          onClick={() => setViewModal({ type: 'vc', data: req })}>
+                          👁 View
                         </button>
-                      )}
-                      {subRole === 'maker' && (
-                        <button className="btn btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
-                          disabled={loading || !!(req.mc_action_id && req.mc_action_status === 'pending')}
-                          onClick={() => handleApproveRequest(req.id)}>
-                          {req.mc_action_id && req.mc_action_status === 'pending' ? 'Forwarded ✓' : 'Forward to Checker'}
-                        </button>
-                      )}
-                      {(subRole === 'super_admin' || subRole === 'maker' || !subRole) && !req.mc_action_id && (
-                        <button className="btn btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', color: '#dc3545' }}
-                          onClick={() => {
-                            const reason = window.prompt('Rejection reason:');
-                            if (reason) handleRejectRequest(req.id, reason);
-                          }}>
-                          Reject
-                        </button>
-                      )}
+                        {(subRole === 'super_admin' || !subRole) && !req.mc_action_id && (
+                          <button className="btn btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
+                            disabled={loading} onClick={() => handleApproveRequest(req.id)}>
+                            Approve &amp; Issue
+                          </button>
+                        )}
+                        {subRole === 'maker' && (
+                          <button className="btn btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
+                            disabled={loading || !!(req.mc_action_id && req.mc_action_status === 'pending')}
+                            onClick={() => handleApproveRequest(req.id)}>
+                            {req.mc_action_id && req.mc_action_status === 'pending' ? 'Forwarded ✓' : 'Forward to Checker'}
+                          </button>
+                        )}
+                        {(subRole === 'super_admin' || subRole === 'maker' || !subRole) && !req.mc_action_id && (
+                          <button className="btn btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', color: '#dc3545' }}
+                            onClick={() => {
+                              const reason = window.prompt('Rejection reason:');
+                              if (reason) handleRejectRequest(req.id, reason);
+                            }}>
+                            Reject
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -546,32 +555,38 @@ export default function AuthorityDashboard() {
                       </div>
                     )}
 
-                    {isPending && (
-                      <div style={{ display: 'flex', gap: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid #f0f0f0' }}>
-                        {(subRole === 'super_admin' || !subRole) && (
-                          <button className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.3rem 0.9rem' }}
-                            disabled={loading} onClick={() => handleDIDApprove(dr.id)}>
-                            Approve &amp; Issue DID
+                    <div style={{ display: 'flex', gap: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid #f0f0f0', flexWrap: 'wrap' }}>
+                      <button className="btn btn-secondary" style={{ fontSize: '0.82rem', padding: '0.3rem 0.8rem' }}
+                        onClick={() => setViewModal({ type: 'did', data: dr })}>
+                        👁 View Details
+                      </button>
+                      {isPending && (
+                        <>
+                          {(subRole === 'super_admin' || !subRole) && (
+                            <button className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.3rem 0.9rem' }}
+                              disabled={loading} onClick={() => handleDIDApprove(dr.id)}>
+                              Approve &amp; Issue DID
+                            </button>
+                          )}
+                          {subRole === 'maker' && (
+                            <button className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.3rem 0.9rem' }}
+                              disabled={loading} onClick={() => handleDIDApprove(dr.id)}>
+                              Forward to Checker
+                            </button>
+                          )}
+                          {subRole === 'checker' && (
+                            <button className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.3rem 0.9rem' }}
+                              disabled={loading} onClick={() => handleDIDIssue(dr.id)}>
+                              ✓ Issue DID
+                            </button>
+                          )}
+                          <button className="btn btn-secondary" style={{ fontSize: '0.85rem', padding: '0.3rem 0.9rem', color: '#dc2626' }}
+                            disabled={loading} onClick={() => handleDIDReject(dr.id)}>
+                            Reject
                           </button>
-                        )}
-                        {subRole === 'maker' && (
-                          <button className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.3rem 0.9rem' }}
-                            disabled={loading} onClick={() => handleDIDApprove(dr.id)}>
-                            Forward to Checker
-                          </button>
-                        )}
-                        {subRole === 'checker' && (
-                          <button className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.3rem 0.9rem' }}
-                            disabled={loading} onClick={() => handleDIDIssue(dr.id)}>
-                            ✓ Issue DID
-                          </button>
-                        )}
-                        <button className="btn btn-secondary" style={{ fontSize: '0.85rem', padding: '0.3rem 0.9rem', color: '#dc2626' }}
-                          disabled={loading} onClick={() => handleDIDReject(dr.id)}>
-                          Reject
-                        </button>
-                      </div>
-                    )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -611,7 +626,11 @@ export default function AuthorityDashboard() {
                       </td>
                       <td style={{ ...tdStyle, color: '#888', fontSize: '0.85rem' }}>{new Date(action.created_at).toLocaleDateString()}</td>
                       <td style={{ ...tdStyle }}>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                          <button className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }}
+                            onClick={() => setViewModal({ type: 'mc', data: action })}>
+                            👁 View
+                          </button>
                           <button className="btn btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }}
                             disabled={loading} onClick={() => handleMCApprove(action.id)}>
                             Approve
@@ -898,6 +917,157 @@ export default function AuthorityDashboard() {
         </>
       )}
     </div>
+
+    {/* ── View Details Modal ── */}
+    {viewModal && (() => {
+      const d = viewModal.data;
+      const rd = typeof d.request_data === 'string' ? JSON.parse(d.request_data || '{}') : (d.request_data || {});
+      const rdEntries = Object.entries(rd).filter(([k]) => !['__v', 'id'].includes(k));
+
+      const Field = ({ label, value }: { label: string; value?: any }) =>
+        value ? (
+          <div style={{ marginBottom: '0.4rem', fontSize: '0.85rem' }}>
+            <span style={{ color: '#64748b', fontWeight: 600, minWidth: 140, display: 'inline-block' }}>{label}:</span>
+            <span style={{ color: '#0f172a' }}>{String(value)}</span>
+          </div>
+        ) : null;
+
+      return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}
+          onClick={() => setViewModal(null)}>
+          <div className="card" style={{ width: 560, maxHeight: '85vh', overflowY: 'auto', padding: '1.75rem', position: 'relative' }}
+            onClick={e => e.stopPropagation()}>
+            <button onClick={() => setViewModal(null)}
+              style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', color: '#94a3b8' }}>✕</button>
+
+            {/* Header */}
+            <div style={{ marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+                {viewModal.type === 'vc' && `📄 VC Request — ${d.credential_type}`}
+                {viewModal.type === 'did' && `🔑 DID Request — ${rd.orgName || d.org_name || 'Organisation'}`}
+                {viewModal.type === 'mc' && `✅ Checker Queue — ${d.credential_type}`}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 3 }}>
+                Submitted: {new Date(d.created_at).toLocaleString()}
+              </div>
+            </div>
+
+            {/* VC Request details */}
+            {viewModal.type === 'vc' && (
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#1a56db', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Requester</div>
+                <Field label="Name" value={d.requester_name} />
+                <Field label="Email" value={d.requester_email} />
+                <Field label="Credential Type" value={d.credential_type} />
+                {d.corp_status && (
+                  <div style={{ marginTop: '0.75rem', marginBottom: '0.75rem' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#1a56db', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Corporate Approval Status</div>
+                    <span style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 10px', borderRadius: 12, fontSize: '0.75rem', fontWeight: 600 }}>
+                      {d.corp_status.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                )}
+                {rdEntries.length > 0 && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#1a56db', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Request Data</div>
+                    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '0.75rem 1rem', border: '1px solid #e2e8f0' }}>
+                      {rdEntries.map(([k, v]) => (
+                        <Field key={k} label={k.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())} value={v as string} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* DID Request details */}
+            {viewModal.type === 'did' && (
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#7c3aed', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Organisation</div>
+                <Field label="Name" value={rd.orgName || d.org_name} />
+                <Field label="CIN" value={rd.cin} />
+                <Field label="Entity Type" value={rd.entityType} />
+                <Field label="Purpose" value={d.purpose} />
+
+                {(rd.superAdminName || rd.contactPerson) && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#7c3aed', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact</div>
+                    <Field label="Super Admin" value={rd.superAdminName} />
+                    <Field label="Admin Email" value={rd.superAdminEmail} />
+                    <Field label="Contact Person" value={rd.contactPerson} />
+                    <Field label="Contact Email" value={rd.contactEmail} />
+                  </div>
+                )}
+
+                <div style={{ marginTop: '0.75rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#7c3aed', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Submitted By</div>
+                  <Field label="Requester" value={d.requester_name} />
+                  <Field label="Email" value={d.requester_email} />
+                </div>
+
+                {d.corp_status && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#7c3aed', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Corporate Approval Chain</div>
+                    {[
+                      { label: 'Submitted', done: true },
+                      { label: 'Maker Reviewed', done: ['maker_reviewed','checker_approved','signatory_approved'].includes(d.corp_status) },
+                      { label: 'Checker Approved', done: ['checker_approved','signatory_approved'].includes(d.corp_status) },
+                      { label: 'Signatory Signed', done: d.corp_status === 'signatory_approved' },
+                    ].map(s => (
+                      <span key={s.label} style={{ display: 'inline-block', marginRight: 6, marginBottom: 4, padding: '2px 9px', borderRadius: 8, fontSize: '0.72rem', fontWeight: 600,
+                        background: s.done ? '#d1fae5' : '#f1f5f9', color: s.done ? '#065f46' : '#94a3b8' }}>
+                        {s.done ? '✓' : '○'} {s.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {rd.additionalNotes && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#7c3aed', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Additional Notes</div>
+                    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '0.6rem 0.75rem', fontSize: '0.85rem', color: '#374151', border: '1px solid #e2e8f0' }}>
+                      {rd.additionalNotes}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* MC / Checker Queue details */}
+            {viewModal.type === 'mc' && (
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#10b981', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Requester</div>
+                <Field label="Name" value={d.requester_name} />
+                <Field label="Email" value={d.requester_email} />
+                <Field label="Credential Type" value={d.credential_type} />
+
+                <div style={{ marginTop: '0.75rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#10b981', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Forwarded By (Maker)</div>
+                  <Field label="Name" value={d.maker_name} />
+                  <Field label="Email" value={d.maker_email} />
+                </div>
+
+                {rdEntries.length > 0 && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#10b981', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Request Data</div>
+                    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '0.75rem 1rem', border: '1px solid #e2e8f0' }}>
+                      {rdEntries.map(([k, v]) => (
+                        <Field key={k} label={k.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())} value={v as string} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Action buttons inside modal for quick access */}
+            <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setViewModal(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
 
     {/* ── Success / Issued VC Modal ── */}
     {successCredential && (

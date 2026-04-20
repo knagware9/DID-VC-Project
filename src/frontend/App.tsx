@@ -21,7 +21,10 @@ function SlimHeader() {
   const { user } = useAuth();
   return (
     <header className="public-header">
-      <Link to="/" className="public-header-logo">DID VC Platform</Link>
+      <Link to="/" className="public-header-logo" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
+        <img src="/ibdic-logo.svg" alt="IBDIC" style={{ width: 28, height: 28 }} />
+        DID VC Platform
+      </Link>
       <div className="public-header-links">
         {user ? (
           <Link to="/">Home</Link>
@@ -48,7 +51,7 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public routes — slim header, no sidebar */}
-      <Route path="/" element={<><SlimHeader /><div className="main-content"><Dashboard /></div></>} />
+      <Route path="/" element={<Dashboard />} />
       <Route path="/login" element={<><SlimHeader /><div className="main-content"><LoginPage /></div></>} />
       <Route path="/register" element={<><SlimHeader /><div className="main-content"><RegisterPage /></div></>} />
       <Route path="/signup" element={<><SlimHeader /><div className="main-content"><OrganizationApplyPage /></div></>} />
